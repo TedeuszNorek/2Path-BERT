@@ -1,0 +1,1730 @@
+Path 2: BART with RGCN
+Create a new Replit project for Path 2 and copy these files:
+
+bart_processor.py
+import re
+import spacy
+import json
+import os
+import time
+from datetime import datetime
+from typing import List, Dict, Any, Tuple, Optional
+class BARTProcessor:
+    """
+    BART-inspired processor for extracting semantic relationships from text.
+    This simulates how BART would process text for extraction tasks.
+    """
+    
+    def __init__(self):
+        """Initialize the BART-inspired processor."""
+        # Load spaCy model for basic NLP processing
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except:
+            # If model is not installed, download it
+            import subprocess
+            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+            self.nlp = spacy.load("en_core_web_sm")
+            
+        # Create logs directory
+        os.makedirs("logs", exist_ok=True)
+        
+        # Log initialization
+        self._log_operation("initialize", {"model": "BART-inspired", "timestamp": datetime.now().isoformat()})
+    
+    def extract_relationships(self, text: str) -> Dict[str, Any]:
+        """
+        Extract semantic relationships from text including polarity and directness.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            Dict with relationships, statistics, and metadata
+        """
+        start_time = time.time()
+        
+        # Preprocess and split into sentences
+        sentences = self._preprocess_text(text)
+        
+        # Extract relationships from each sentence
+        all_relationships = []
+        for sentence in sentences:
+            relationships = self._extract_from_sentence(sentence)
+            all_relationships.extend(relationships)
+        
+        # Classify polarity and directness
+        for relationship in all_relationships:
+            relationship["polarity"] = self._classify_polarity(relationship["sentence"], 
+                                                           relationship["subject"], 
+                                                           relationship["predicate"], 
+                                                           relationship["object"])
+            relationship["directness"] = self._classify_directness(relationship["sentence"], 
+                                                               relationship["subject"], 
+                                                               relationship["predicate"], 
+                                                               relationship["object"])
+            relationship["confidence"] = self._calculate_confidence(relationship)
+        
+        # Calculate statistics
+        statistics = self._calculate_statistics(all_relationships)
+        
+        # Prepare RDF triples
+        rdf_triples = self.convert_to_rdf(all_relationships)
+        
+        # Log extraction
+        self._log_operation("extract_relationships", {
+            "input_length": len(text),
+            "num_sentences": len(sentences),
+            "num_relationships": len(all_relationships),
+            "processing_time": time.time() - start_time
+        })
+        
+        return {
+            "relationships": all_relationships,
+            "statistics": statistics,
+            "rdf_triples": rdf_triples,
+            "processing_time": time.time() - start_time
+        }
+    
+    def _preprocess_text(self, text: str) -> List[str]:
+        """Split text into sentences and clean."""
+        doc = self.nlp(text)
+        sentences = [sent.text.strip() for sent in doc.sents]
+        return sentences
+    
+    def _extract_from_sentence(self, sentence: str) -> List[Dict[str, Any]]:
+        """Extract relationships from a single sentence."""
+        doc = self.nlp(sentence)
+        relationships = []
+        
+        # Find main verb and its arguments
+        for token in doc:
+            # Look for verbs as the predicate
+            if token.pos_ == "VERB":
+                # Find subject
+                subjects = [child for child in token.children if child.dep_ in ["nsubj", "nsubjpass"]]
+                
+                # Find objects
+                objects = [child for child in token.children 
+                          if child.dep_ in ["dobj", "pobj", "attr", "iobj"]]
+                
+                # If we have both subject and object, create a relationship
+                for subj in subjects:
+                    for obj in objects:
+                        # Expand subject and object to noun phrases
+                        subject_span = self._expand_span(doc, subj)
+                        object_span = self._expand_span(doc, obj)
+                        
+                        # Skip if subject and object are the same
+                        if subject_span.text.lower() == object_span.text.lower():
+                            continue
+                        
+                        # Create relationship
+                        relationship = {
+                            "subject": subject_span.text,
+                            "predicate": token.lemma_,
+                            "object": object_span.text,
+                            "sentence": sentence
+                        }
+                        relationships.append(relationship)
+        
+        # If no relationships found, try a rule-based approach
+        if not relationships:
+            relationships = self._rule_based_extraction(sentence)
+            
+        return relationships
+    
+    def _expand_span(self, doc, token):
+        """Expand token to a noun phrase if possible."""
+        # Start with the token itself
+        start, end = token.i, token.i + 1
+        
+        # If token is part of a compound, expand to include the full compound
+        if token.dep_ == "compound":
+            head = token.head
+            while head.dep_ == "compound":
+                head = head.head
+            if head.pos_ in ["NOUN", "PROPN"]:
+                start = min(token.i, head.i)
+                end = max(token.i + 1, head.i + 1)
+        
+        # Include modifiers
+        for child in token.children:
+            if child.dep_ in ["amod", "compound", "det", "nummod", "poss"]:
+                start = min(start, child.i)
+                end = max(end, child.i + 1)
+        
+        return doc[start:end]
+    
+    def _rule_based_extraction(self, sentence: str) -> List[Dict[str, Any]]:
+        """Apply rule-based extraction for sentences without clear SVO structure."""
+        relationships = []
+        doc = self.nlp(sentence)
+        
+        # Check for possession patterns
+        has_pattern = re.search(r'(\w+)\s+has\s+(\w+)', sentence, re.IGNORECASE)
+        if has_pattern:
+            relationship = {
+                "subject": has_pattern.group(1),
+                "predicate": "has",
+                "object": has_pattern.group(2),
+                "sentence": sentence
+            }
+            relationships.append(relationship)
+        
+        # Check for negation patterns
+        not_pattern = re.search(r'(\w+)\s+(?:isn\'t|is not|aren\'t|are not)\s+(\w+)', sentence, re.IGNORECASE)
+        if not_pattern:
+            relationship = {
+                "subject": not_pattern.group(1),
+                "predicate": "is not",
+                "object": not_pattern.group(2),
+                "sentence": sentence
+            }
+            relationships.append(relationship)
+        
+        # Check for action patterns
+        action_pattern = re.search(r'(\w+)\s+(\w+)\s+(\w+)', sentence, re.IGNORECASE)
+        if action_pattern and not (has_pattern or not_pattern):
+            subject = action_pattern.group(1)
+            verb = action_pattern.group(2)
+            obj = action_pattern.group(3)
+            
+            # Check if the middle word is a verb
+            if self.nlp(verb)[0].pos_ == "VERB":
+                relationship = {
+                    "subject": subject,
+                    "predicate": verb,
+                    "object": obj,
+                    "sentence": sentence
+                }
+                relationships.append(relationship)
+        
+        return relationships
+    
+    def _classify_polarity(self, sentence: str, subject: str, predicate: str, obj: str) -> str:
+        """Classify the polarity of a relationship."""
+        # Check for negation words
+        negation_words = ["not", "n't", "no", "never", "neither", "nor", "none"]
+        
+        # Default polarity is neutral
+        polarity = "neutral"
+        
+        # Check for explicit negation
+        for word in negation_words:
+            if word in sentence.lower():
+                polarity = "negative"
+                break
+        
+        # Check for positive sentiment words
+        positive_words = ["good", "great", "excellent", "amazing", "wonderful", "positive", 
+                         "beneficial", "helpful", "improve", "benefit", "advantage"]
+        
+        for word in positive_words:
+            if word in sentence.lower():
+                polarity = "positive"
+                break
+        
+        # Check for negative sentiment words
+        negative_words = ["bad", "terrible", "horrible", "awful", "negative", "harmful", 
+                         "detrimental", "worsen", "damage", "disadvantage"]
+        
+        for word in negative_words:
+            if word in sentence.lower():
+                polarity = "negative"
+                break
+        
+        # Special cases for common predicates
+        if predicate.lower() in ["cause", "lead to", "result in"]:
+            # Check if the object has negative connotations
+            if any(word in obj.lower() for word in negative_words):
+                polarity = "negative"
+        
+        return polarity
+    
+    def _classify_directness(self, sentence: str, subject: str, predicate: str, obj: str) -> str:
+        """Classify the directness of a relationship."""
+        # Default is direct
+        directness = "direct"
+        
+        # Check for modal verbs indicating indirectness
+        modal_verbs = ["may", "might", "could", "can", "would", "should", "possibly", 
+                      "perhaps", "potentially", "likely", "unlikely"]
+        
+        if any(modal in sentence.lower() for modal in modal_verbs):
+            directness = "indirect"
+        
+        # Check for uncertainty indicators
+        uncertainty_phrases = ["not sure", "uncertain", "unclear", "may be", "might be", 
+                              "is possible", "possibility", "hypothesis", "theory", 
+                              "correlation", "association", "potential"]
+        
+        if any(phrase in sentence.lower() for phrase in uncertainty_phrases):
+            directness = "indirect"
+        
+        return directness
+    
+    def _calculate_confidence(self, relationship: Dict[str, Any]) -> float:
+        """Calculate confidence score for the relationship."""
+        # Base confidence
+        confidence = 0.7
+        
+        # Adjust based on presence of subject, predicate, and object
+        if all(relationship.get(k) for k in ["subject", "predicate", "object"]):
+            confidence += 0.2
+        
+        # Penalize very short components
+        for component in ["subject", "predicate", "object"]:
+            if component in relationship and len(relationship[component]) < 2:
+                confidence -= 0.1
+        
+        # Adjust based on directness
+        if relationship.get("directness") == "indirect":
+            confidence -= 0.1
+        
+        # Ensure confidence is between 0 and 1
+        return max(0.0, min(1.0, confidence))
+    
+    def convert_to_rdf(self, relationships: List[Dict[str, Any]]) -> List[Tuple[str, str, str]]:
+        """Convert relationships to RDF-like triples."""
+        rdf_triples = []
+        
+        for rel in relationships:
+            # Basic triple
+            triple = (rel["subject"], rel["predicate"], rel["object"])
+            rdf_triples.append(triple)
+            
+            # Add polarity as a triple if not neutral
+            if rel.get("polarity", "neutral") != "neutral":
+                polarity_triple = (
+                    f"{rel['subject']}_{rel['predicate']}_{rel['object']}", 
+                    "has_polarity", 
+                    rel["polarity"]
+                )
+                rdf_triples.append(polarity_triple)
+            
+            # Add directness as a triple if indirect
+            if rel.get("directness", "direct") == "indirect":
+                directness_triple = (
+                    f"{rel['subject']}_{rel['predicate']}_{rel['object']}",
+                    "has_directness",
+                    "indirect"
+                )
+                rdf_triples.append(directness_triple)
+            
+            # Add confidence as a triple if available
+            if "confidence" in rel:
+                confidence_triple = (
+                    f"{rel['subject']}_{rel['predicate']}_{rel['object']}",
+                    "has_confidence",
+                    str(rel["confidence"])
+                )
+                rdf_triples.append(confidence_triple)
+        
+        return rdf_triples
+    
+    def _calculate_statistics(self, relationships: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calculate statistics about extracted relationships."""
+        if not relationships:
+            return {
+                "total_relationships": 0,
+                "polarity_distribution": {},
+                "directness_distribution": {}
+            }
+        
+        # Count polarities
+        polarity_counts = {"positive": 0, "negative": 0, "neutral": 0}
+        for rel in relationships:
+            polarity = rel.get("polarity", "neutral")
+            polarity_counts[polarity] += 1
+        
+        # Count directness
+        directness_counts = {"direct": 0, "indirect": 0}
+        for rel in relationships:
+            directness = rel.get("directness", "direct")
+            directness_counts[directness] += 1
+        
+        # Calculate average confidence
+        confidence_sum = sum(rel.get("confidence", 0.0) for rel in relationships)
+        avg_confidence = confidence_sum / len(relationships)
+        
+        return {
+            "total_relationships": len(relationships),
+            "polarity_distribution": polarity_counts,
+            "directness_distribution": directness_counts,
+            "average_confidence": avg_confidence,
+            "unique_subjects": len(set(rel["subject"] for rel in relationships)),
+            "unique_predicates": len(set(rel["predicate"] for rel in relationships)),
+            "unique_objects": len(set(rel["object"] for rel in relationships))
+        }
+    
+    def _log_operation(self, operation: str, metrics: Dict[str, Any]) -> None:
+        """Log operations to file."""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "metrics": metrics
+        }
+        
+        with open("logs/bart_operations.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    
+    def extract_relationships_simplified(self, text: str) -> Dict[str, Any]:
+        """
+        Simplified relationship extraction as a fallback.
+        Used when the main extraction method fails.
+        """
+        # Split by periods to get sentences
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        
+        all_relationships = []
+        for sentence in sentences:
+            # Very basic SVO extraction
+            words = sentence.split()
+            if len(words) >= 3:
+                relationship = {
+                    "subject": words[0],
+                    "predicate": words[1] if len(words) > 1 else "is",
+                    "object": words[2] if len(words) > 2 else "",
+                    "sentence": sentence,
+                    "polarity": "neutral",
+                    "directness": "direct",
+                    "confidence": 0.5
+                }
+                all_relationships.append(relationship)
+        
+        # Calculate basic statistics
+        statistics = {
+            "total_relationships": len(all_relationships),
+            "polarity_distribution": {"neutral": len(all_relationships)},
+            "directness_distribution": {"direct": len(all_relationships)},
+            "average_confidence": 0.5
+        }
+        
+        # Generate RDF triples
+        rdf_triples = [(rel["subject"], rel["predicate"], rel["object"]) 
+                       for rel in all_relationships]
+        
+        return {
+            "relationships": all_relationships,
+            "statistics": statistics,
+            "rdf_triples": rdf_triples
+        }
+rgcn_model.py
+import os
+import json
+import time
+import networkx as nx
+import numpy as np
+from typing import List, Dict, Any
+from datetime import datetime
+class RGCNModel:
+    """
+    Relational Graph Convolutional Network (RGCN) for relationship graph enhancement.
+    """
+    
+    def __init__(self, hidden_dims=16, num_bases=4):
+        """Initialize the RGCN model configuration."""
+        self.hidden_dims = hidden_dims
+        self.num_bases = num_bases
+        
+        # Create logs directory
+        os.makedirs("logs", exist_ok=True)
+        
+        # Log initialization
+        self._log_operation("initialize", {
+            "model": "RGCN",
+            "hidden_dims": hidden_dims,
+            "num_bases": num_bases,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def enhance_graph(self, relationships: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Enhance a graph of semantic relationships using RGCN.
+        
+        Args:
+            relationships: List of extracted relationships
+            
+        Returns:
+            Dictionary with RGCN analysis results
+        """
+        start_time = time.time()
+        
+        # Create a graph from relationships
+        G = self._create_graph(relationships)
+        
+        # Analyze the graph structure
+        structure_metrics = self._analyze_graph_structure(G)
+        
+        # Simulate node embeddings
+        node_embeddings = self._compute_node_embeddings(G)
+        
+        # Identify important nodes and relationships
+        important_elements = self._identify_important_elements(G, node_embeddings)
+        
+        # Detect communities
+        communities = self._detect_communities(G)
+        
+        # Analyze relationships between communities
+        community_relationships = self._analyze_community_relationships(G, communities)
+        
+        # Log operation
+        self._log_operation("enhance_graph", {
+            "num_relationships": len(relationships),
+            "num_nodes": G.number_of_nodes(),
+            "num_edges": G.number_of_edges(),
+            "num_communities": len(communities),
+            "processing_time": time.time() - start_time
+        })
+        
+        return {
+            "graph_structure": structure_metrics,
+            "important_elements": important_elements,
+            "communities": {
+                "count": len(communities),
+                "sizes": [len(c) for c in communities],
+                "details": communities
+            },
+            "community_relationships": community_relationships,
+            "processing_time": time.time() - start_time
+        }
+    
+    def _create_graph(self, relationships: List[Dict[str, Any]]) -> nx.DiGraph:
+        """Create a directed graph from relationships."""
+        G = nx.DiGraph()
+        
+        # Add relationships as edges
+        for rel in relationships:
+            # Add nodes if they don't exist
+            if not G.has_node(rel["subject"]):
+                G.add_node(rel["subject"], type="entity")
+            
+            if not G.has_node(rel["object"]):
+                G.add_node(rel["object"], type="entity")
+            
+            # Add the edge with attributes
+            G.add_edge(
+                rel["subject"],
+                rel["object"],
+                predicate=rel["predicate"],
+                polarity=rel.get("polarity", "neutral"),
+                directness=rel.get("directness", "direct"),
+                confidence=rel.get("confidence", 0.5),
+                sentence=rel.get("sentence", "")
+            )
+        
+        return G
+    
+    def _analyze_graph_structure(self, G: nx.DiGraph) -> Dict[str, Any]:
+        """Analyze the structure of the relationship graph."""
+        # Calculate basic graph metrics
+        metrics = {
+            "node_count": G.number_of_nodes(),
+            "edge_count": G.number_of_edges(),
+            "density": nx.density(G),
+            "is_connected": nx.is_weakly_connected(G),
+        }
+        
+        # Calculate degree statistics
+        in_degrees = [d for _, d in G.in_degree()]
+        out_degrees = [d for _, d in G.out_degree()]
+        
+        metrics["degree_stats"] = {
+            "max_in_degree": max(in_degrees) if in_degrees else 0,
+            "max_out_degree": max(out_degrees) if out_degrees else 0,
+            "avg_in_degree": np.mean(in_degrees) if in_degrees else 0,
+            "avg_out_degree": np.mean(out_degrees) if out_degrees else 0,
+        }
+        
+        # Count relationship types
+        predicate_counts = {}
+        polarity_counts = {"positive": 0, "negative": 0, "neutral": 0}
+        directness_counts = {"direct": 0, "indirect": 0}
+        
+        for _, _, data in G.edges(data=True):
+            # Count predicates
+            predicate = data.get("predicate", "unknown")
+            predicate_counts[predicate] = predicate_counts.get(predicate, 0) + 1
+            
+            # Count polarities
+            polarity = data.get("polarity", "neutral")
+            polarity_counts[polarity] += 1
+            
+            # Count directness
+            directness = data.get("directness", "direct")
+            directness_counts[directness] += 1
+        
+        metrics["relationship_types"] = {
+            "predicates": predicate_counts,
+            "polarity": polarity_counts,
+            "directness": directness_counts
+        }
+        
+        return metrics
+    
+    def _compute_node_embeddings(self, G: nx.DiGraph) -> Dict[str, List[float]]:
+        """
+        Simulate RGCN embedding computation for graph nodes.
+        This is a simplified version that doesn't require PyTorch.
+        """
+        embeddings = {}
+        
+        for node in G.nodes():
+            # Generate a consistent pseudo-random embedding based on node name
+            seed = abs(hash(node)) % 10000
+            np.random.seed(seed)
+            embeddings[node] = np.random.randn(self.hidden_dims).tolist()
+        
+        return embeddings
+    
+    def _identify_important_elements(self, G: nx.DiGraph, embeddings: Dict[str, List[float]]) -> Dict[str, Any]:
+        """Identify important nodes and relationships in the graph."""
+        # Calculate centrality measures
+        degree_centrality = nx.degree_centrality(G)
+        in_centrality = nx.in_degree_centrality(G)
+        out_centrality = nx.out_degree_centrality(G)
+        
+        try:
+            # These can fail on certain graph structures
+            betweenness = nx.betweenness_centrality(G)
+            pagerank = nx.pagerank(G)
+        except:
+            betweenness = {node: 0.0 for node in G.nodes()}
+            pagerank = {node: 1.0/G.number_of_nodes() for node in G.nodes()}
+        
+        # Combine centrality measures to identify important nodes
+        important_nodes = {}
+        for node in G.nodes():
+            importance_score = (
+                degree_centrality.get(node, 0) +
+                betweenness.get(node, 0) +
+                pagerank.get(node, 0)
+            ) / 3.0
+            
+            important_nodes[node] = importance_score
+        
+        # Sort nodes by importance
+        sorted_nodes = sorted(important_nodes.items(), key=lambda x: x[1], reverse=True)
+        top_nodes = [{"node": node, "score": score} for node, score in sorted_nodes[:5]]
+        
+        # Identify important relationships based on node importance
+        important_edges = []
+        for u, v, data in G.edges(data=True):
+            edge_importance = (important_nodes.get(u, 0) + important_nodes.get(v, 0)) / 2
+            
+            if data.get("confidence", 0.5) > 0.7:
+                edge_importance *= 1.2
+            
+            important_edges.append({
+                "source": u,
+                "target": v,
+                "predicate": data.get("predicate", ""),
+                "importance": edge_importance
+            })
+        
+        # Sort edges by importance
+        sorted_edges = sorted(important_edges, key=lambda x: x["importance"], reverse=True)
+        top_edges = sorted_edges[:5]
+        
+        return {
+            "top_nodes": top_nodes,
+            "top_relationships": top_edges
+        }
+    
+    def _detect_communities(self, G: nx.DiGraph) -> List[Dict[str, Any]]:
+        """Detect communities in the graph."""
+        # Convert to undirected for community detection
+        G_undirected = G.to_undirected()
+        
+        try:
+            # Use connected components as a simple form of community detection
+            communities = list(nx.connected_components(G_undirected))
+        except:
+            # Fallback to treating each node as its own community
+            communities = [{node} for node in G.nodes()]
+        
+        # Format communities
+        formatted_communities = []
+        for i, community in enumerate(communities):
+            # Extract relationships within the community
+            community_relationships = []
+            for u, v, data in G.edges(data=True):
+                if u in community and v in community:
+                    community_relationships.append({
+                        "source": u,
+                        "target": v,
+                        "predicate": data.get("predicate", ""),
+                        "polarity": data.get("polarity", "neutral")
+                    })
+            
+            formatted_communities.append({
+                "id": i,
+                "size": len(community),
+                "nodes": list(community),
+                "internal_relationships": community_relationships
+            })
+        
+        return formatted_communities
+    
+    def _analyze_community_relationships(self, G: nx.DiGraph, communities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Analyze relationships between different communities."""
+        inter_community_relations = []
+        
+        # Create a mapping from nodes to community IDs
+        node_to_community = {}
+        for community in communities:
+            for node in community["nodes"]:
+                node_to_community[node] = community["id"]
+        
+        # Find edges between communities
+        for u, v, data in G.edges(data=True):
+            u_community = node_to_community.get(u)
+            v_community = node_to_community.get(v)
+            
+            if u_community != v_community:
+                inter_community_relations.append({
+                    "source_community": u_community,
+                    "target_community": v_community,
+                    "source_node": u,
+                    "target_node": v,
+                    "predicate": data.get("predicate", ""),
+                    "polarity": data.get("polarity", "neutral")
+                })
+        
+        return inter_community_relations
+    
+    def _log_operation(self, operation: str, metrics: Dict[str, Any]) -> None:
+        """Log operations to file for experiment tracking."""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "metrics": metrics
+        }
+        
+        with open("logs/rgcn_operations.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    
+    def simple_enhance(self, relationships: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Simplified graph enhancement as a fallback.
+        Used when the main enhancement method fails.
+        """
+        G = self._create_graph(relationships)
+        
+        basic_metrics = {
+            "node_count": G.number_of_nodes(),
+            "edge_count": G.number_of_edges(),
+            "density": nx.density(G),
+        }
+        
+        return {
+            "graph_structure": basic_metrics,
+            "important_elements": {
+                "top_nodes": [{"node": node, "score": 1.0} 
+                              for node in list(G.nodes())[:3]],
+                "top_relationships": []
+            },
+            "communities": {
+                "count": 1,
+                "sizes": [G.number_of_nodes()],
+                "details": [{
+                    "id": 0,
+                    "size": G.number_of_nodes(),
+                    "nodes": list(G.nodes()),
+                    "internal_relationships": []
+                }]
+            },
+            "community_relationships": [],
+            "processing_time": 0.1
+        }
+evaluation.py
+import json
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import List, Dict, Any, Tuple
+from datetime import datetime
+def evaluate_triples(predicted_triples: List[Tuple], gold_triples: List[Dict[str, str]]) -> Dict[str, float]:
+    """
+    Evaluate predicted RDF triples against gold standard triples.
+    
+    Args:
+        predicted_triples: List of predicted RDF triples
+        gold_triples: List of gold standard triples as dictionaries
+        
+    Returns:
+        Dictionary with precision, recall, and F1 scores
+    """
+    # Convert gold triples to standardized format for comparison
+    gold_standardized = set()
+    for triple in gold_triples:
+        if all(k in triple for k in ["subject", "predicate", "object"]):
+            gold_standardized.add(
+                (triple["subject"].lower(), triple["predicate"].lower(), triple["object"].lower())
+            )
+    
+    # Convert predicted triples to standardized format
+    pred_standardized = set()
+    for triple in predicted_triples:
+        if len(triple) >= 3:
+            pred_standardized.add(
+                (triple[0].lower(), triple[1].lower(), triple[2].lower())
+            )
+    
+    # Calculate metrics
+    true_positives = len(gold_standardized.intersection(pred_standardized))
+    false_positives = len(pred_standardized - gold_standardized)
+    false_negatives = len(gold_standardized - pred_standardized)
+    
+    # Calculate precision, recall, and F1
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    
+    # Log the evaluation
+    log_evaluation(predicted_triples, gold_triples, {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "true_positives": true_positives,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives
+    })
+    
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "true_positives": true_positives,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives
+    }
+def export_confusion_matrix(predicted_triples: List[Tuple], gold_triples: List[Dict[str, str]], request_id: str) -> str:
+    """
+    Generate and export a confusion matrix for predicates in the RDF triples.
+    
+    Args:
+        predicted_triples: List of predicted RDF triples
+        gold_triples: List of gold standard triples
+        request_id: Unique identifier for the request
+        
+    Returns:
+        Path to the saved confusion matrix image
+    """
+    # Ensure results directory exists
+    os.makedirs("results", exist_ok=True)
+    
+    # Extract predicates
+    gold_predicates = [triple["predicate"] for triple in gold_triples]
+    pred_predicates = [triple[1] for triple in predicted_triples if len(triple) >= 3]
+    
+    # Get unique predicates
+    all_predicates = sorted(list(set(gold_predicates + pred_predicates)))
+    
+    # Add a "no match" category for false positives
+    if "<no_match>" not in all_predicates:
+        all_predicates.append("<no_match>")
+    
+    # Initialize confusion matrix
+    matrix_size = len(all_predicates)
+    confusion_matrix = np.zeros((matrix_size, matrix_size))
+    
+    # Create mapping from predicate to index
+    predicate_to_index = {pred: i for i, pred in enumerate(all_predicates)}
+    
+    # Fill confusion matrix
+    for pred_triple in predicted_triples:
+        if len(pred_triple) < 3:
+            continue
+            
+        pred_subject, pred_predicate, pred_object = pred_triple[0], pred_triple[1], pred_triple[2]
+        
+        # Find matching gold triples
+        matched = False
+        for gold_triple in gold_triples:
+            gold_subject = gold_triple.get("subject", "")
+            gold_predicate = gold_triple.get("predicate", "")
+            gold_object = gold_triple.get("object", "")
+            
+            # Match based on subject and object
+            if pred_subject.lower() == gold_subject.lower() and pred_object.lower() == gold_object.lower():
+                pred_idx = predicate_to_index.get(pred_predicate, 0)
+                gold_idx = predicate_to_index.get(gold_predicate, 0)
+                confusion_matrix[gold_idx, pred_idx] += 1
+                matched = True
+        
+        # If no match was found, it's a false positive
+        if not matched:
+            no_match_idx = predicate_to_index.get("<no_match>", len(all_predicates) - 1)
+            pred_idx = predicate_to_index.get(pred_predicate, 0)
+            confusion_matrix[no_match_idx, pred_idx] += 1
+    
+    # Create visualization
+    plt.figure(figsize=(12, 10))
+    plt.imshow(confusion_matrix, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title('Predicate Confusion Matrix')
+    plt.colorbar()
+    
+    # Add labels
+    plt.xticks(np.arange(len(all_predicates)), all_predicates, rotation=90)
+    plt.yticks(np.arange(len(all_predicates)), all_predicates)
+    
+    # Add numbers to the cells
+    for i in range(len(all_predicates)):
+        for j in range(len(all_predicates)):
+            if confusion_matrix[i, j] > 0:
+                plt.text(j, i, int(confusion_matrix[i, j]),
+                         ha="center", va="center", 
+                         color="white" if confusion_matrix[i, j] > confusion_matrix.max() / 2 else "black")
+    
+    plt.tight_layout()
+    
+    # Save as image
+    filename = f"results/confusion_matrix_{request_id}.png"
+    plt.savefig(filename)
+    plt.close()
+    
+    # Save as CSV for data analysis
+    import pandas as pd
+    df = pd.DataFrame(confusion_matrix, index=all_predicates, columns=all_predicates)
+    df.to_csv(f"results/confusion_matrix_{request_id}.csv")
+    
+    return filename
+def log_evaluation(predicted_triples: List[Tuple], gold_triples: List[Dict[str, str]], 
+                 metrics: Dict[str, float]) -> None:
+    """
+    Log evaluation details to file.
+    
+    Args:
+        predicted_triples: List of predicted RDF triples
+        gold_triples: List of gold standard triples
+        metrics: Evaluation metrics
+    """
+    os.makedirs("logs", exist_ok=True)
+    
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "predicted_count": len(predicted_triples),
+        "gold_count": len(gold_triples),
+        "metrics": metrics
+    }
+    
+    with open("logs/evaluation.jsonl", "a") as f:
+        f.write(json.dumps(log_entry) + "\n")
+utils.py
+import os
+import json
+import re
+from typing import Dict, Any
+from datetime import datetime
+def setup_directories():
+    """Create necessary directories for the application."""
+    directories = ["models", "logs", "results"]
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+def validate_input(text: str) -> bool:
+    """
+    Validate text input for processing.
+    
+    Args:
+        text: Input text to validate
+        
+    Returns:
+        True if valid, raises exception otherwise
+    """
+    # Check for empty input
+    if not text or not text.strip():
+        raise ValueError("Input text cannot be empty")
+    
+    # Check length limit (approx. 2048 tokens)
+    if len(text.split()) > 2048:
+        raise ValueError("Input text exceeds the 2048 token limit")
+    
+    # Check for personal identifiable information (PII)
+    pii_patterns = [
+        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email
+        r'\b\d{11}\b',  # PESEL (Polish national ID)
+        r'\b\d{9}\b',   # SSN-like
+        r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{3}\b',  # Phone number
+    ]
+    
+    for pattern in pii_patterns:
+        if re.search(pattern, text):
+            raise ValueError("Input contains personal identifiable information (PII)")
+    
+    return True
+def save_experiment_config(config: Dict[str, Any], experiment_id: str) -> str:
+    """
+    Save experiment configuration to a file.
+    
+    Args:
+        config: Experiment configuration dictionary
+        experiment_id: Unique identifier for the experiment
+        
+    Returns:
+        Path to the saved configuration file
+    """
+    os.makedirs("logs", exist_ok=True)
+    
+    filename = f"logs/experiment_{experiment_id}.json"
+    
+    with open(filename, "w") as f:
+        json.dump(config, f, indent=2, default=str)
+    
+    return filename
+def get_experiment_logs(experiment_id: str = None) -> Dict[str, Any]:
+    """
+    Get logs for a specific experiment or all experiments.
+    
+    Args:
+        experiment_id: Optional ID to filter for a specific experiment
+        
+    Returns:
+        Dictionary of experiment logs
+    """
+    logs_dir = "logs"
+    if not os.path.exists(logs_dir):
+        return {"experiments": []}
+    
+    experiments = {}
+    
+    for filename in os.listdir(logs_dir):
+        if filename.startswith("experiment_") and filename.endswith(".json"):
+            file_path = os.path.join(logs_dir, filename)
+            with open(file_path, "r") as f:
+                experiment_data = json.load(f)
+                
+                exp_id = experiment_data.get("request_id", "unknown")
+                
+                if experiment_id is None or exp_id == experiment_id:
+                    experiments[exp_id] = experiment_data
+    
+    # Sort by timestamp if available
+    sorted_experiments = sorted(
+        experiments.values(),
+        key=lambda x: x.get("timestamp", ""),
+        reverse=True
+    )
+    
+    return {"experiments": sorted_experiments}
+def set_global_seed(seed=42):
+    """Set global random seeds for reproducibility."""
+    import random
+    import numpy as np
+    import torch
+    
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    
+    # Log seed setting
+    os.makedirs("logs", exist_ok=True)
+    with open("logs/seed_config.json", "w") as f:
+        json.dump({"seed": seed, "timestamp": datetime.now().isoformat()}, f)
+main.py
+import os
+import uvicorn
+from app import app
+if __name__ == "__main__":
+    # Set up port from environment variable or default
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Print startup message
+    print(f"BART-RGCN Semantic Analyzer API READY at http://localhost:{port}/docs")
+    
+    # Start the server
+    uvicorn.run(app, host="0.0.0.0", port=port)
+Path 3: GraphSage Approach
+Create a new Replit project for Path 3 and copy these files:
+
+graph_processor.py
+import json
+import os
+import time
+import numpy as np
+import networkx as nx
+import spacy
+from datetime import datetime
+from typing import List, Dict, Any, Tuple, Optional
+class GraphSageProcessor:
+    """
+    GraphSage-inspired processor for semantic text analysis that converts text directly 
+    to graph structures without using intermediate LLM extraction.
+    """
+    
+    def __init__(self):
+        """Initialize the GraphSage processor."""
+        # Load spaCy for basic NLP processing
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except:
+            # Download if not available
+            import subprocess
+            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+            self.nlp = spacy.load("en_core_web_sm")
+        
+        # Create logs directory
+        os.makedirs("logs", exist_ok=True)
+        
+        # Log initialization
+        self._log_operation("initialize", {"model": "GraphSage-inspired", "timestamp": datetime.now().isoformat()})
+    
+    def process_text(self, text: str) -> Dict[str, Any]:
+        """
+        Process text to generate a graph representation.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            Dict with graph data and analysis results
+        """
+        start_time = time.time()
+        
+        # Parse text with spaCy
+        doc = self.nlp(text)
+        
+        # Create initial graph based on dependency structure
+        G = self._create_dependency_graph(doc)
+        
+        # Extract entities and add them to the graph
+        self._add_entities(G, doc)
+        
+        # Analyze the semantic structure
+        semantic_analysis = self._analyze_semantics(G, doc)
+        
+        # Generate embeddings for nodes
+        node_embeddings = self._generate_node_embeddings(G)
+        
+        # Apply community detection
+        communities = self._detect_communities(G)
+        
+        # Calculate graph metrics
+        metrics = self._calculate_graph_metrics(G)
+        
+        # Generate final graph data
+        graph_data = self._prepare_graph_data(G, node_embeddings, communities)
+        
+        # Log processing
+        self._log_operation("process_text", {
+            "input_length": len(text),
+            "num_sentences": len(list(doc.sents)),
+            "num_nodes": G.number_of_nodes(),
+            "num_edges": G.number_of_edges(),
+            "processing_time": time.time() - start_time
+        })
+        
+        return {
+            "graph": graph_data,
+            "semantic_analysis": semantic_analysis,
+            "metrics": metrics,
+            "processing_time": time.time() - start_time
+        }
+    
+    def _create_dependency_graph(self, doc) -> nx.Graph:
+        """Create a graph based on dependency parsing."""
+        G = nx.Graph()
+        
+        # Add words as nodes
+        for token in doc:
+            G.add_node(token.i, 
+                      word=token.text, 
+                      lemma=token.lemma_, 
+                      pos=token.pos_, 
+                      tag=token.tag_,
+                      dep=token.dep_)
+        
+        # Add dependency edges
+        for token in doc:
+            if token.head.i != token.i:  # Skip root
+                G.add_edge(
+                    token.i, 
+                    token.head.i, 
+                    type="dependency", 
+                    relation=token.dep_
+                )
+        
+        return G
+    
+    def _add_entities(self, G: nx.Graph, doc) -> None:
+        """Add named entities to the graph."""
+        # Add entity nodes
+        for ent in doc.ents:
+            # Create a node for the entity
+            entity_id = f"entity_{ent.start}_{ent.end}"
+            G.add_node(
+                entity_id,
+                word=ent.text,
+                type="entity",
+                entity_type=ent.label_
+            )
+            
+            # Connect entity to its tokens
+            for token_idx in range(ent.start, ent.end):
+                if token_idx in G.nodes():
+                    G.add_edge(
+                        entity_id, 
+                        token_idx, 
+                        type="entity_token",
+                        weight=1.0
+                    )
+    
+    def _analyze_semantics(self, G: nx.Graph, doc) -> Dict[str, Any]:
+        """Analyze the semantic structure of the text."""
+        # Extract subjects, verbs, and objects
+        subjects = []
+        verbs = []
+        objects = []
+        
+        # Track semantic relationships
+        relationships = []
+        
+        # Process each sentence
+        for sent in doc.sents:
+            sent_subjects = []
+            sent_verbs = []
+            sent_objects = []
+            
+            # Extract SVO components
+            for token in sent:
+                if token.dep_ in ["nsubj", "nsubjpass"]:
+                    sent_subjects.append(token)
+                elif token.pos_ == "VERB":
+                    sent_verbs.append(token)
+                elif token.dep_ in ["dobj", "pobj", "attr"]:
+                    sent_objects.append(token)
+            
+            # Extract relationships from SVO components
+            for subj in sent_subjects:
+                for verb in sent_verbs:
+                    # Check if verb is related to subject
+                    if verb == subj.head or subj == verb.head:
+                        for obj in sent_objects:
+                            # Check if object is related to verb
+                            if obj.head == verb or verb == obj.head:
+                                # Create relationship
+                                rel = {
+                                    "subject": subj.text,
+                                    "predicate": verb.lemma_,
+                                    "object": obj.text,
+                                    "polarity": self._determine_polarity(sent, subj, verb, obj),
+                                    "directness": self._determine_directness(sent, subj, verb, obj),
+                                    "confidence": 0.8  # Default confidence
+                                }
+                                relationships.append(rel)
+                                
+                                # Add semantic edges to graph
+                                if subj.i in G.nodes() and obj.i in G.nodes():
+                                    G.add_edge(
+                                        subj.i,
+                                        obj.i,
+                                        type="semantic",
+                                        relation=verb.lemma_,
+                                        polarity=rel["polarity"],
+                                        directness=rel["directness"]
+                                    )
+            
+            subjects.extend(sent_subjects)
+            verbs.extend(sent_verbs)
+            objects.extend(sent_objects)
+        
+        # Return semantic analysis results
+        return {
+            "relationships": relationships,
+            "counts": {
+                "subjects": len(subjects),
+                "verbs": len(verbs),
+                "objects": len(objects)
+            }
+        }
+    
+    def _determine_polarity(self, sent, subj, verb, obj) -> str:
+        """Determine the polarity of a relationship."""
+        # Check for negation
+        if any(token.dep_ == "neg" for token in verb.children):
+            return "negative"
+        
+        # Check sentiment based on lexical hints
+        negative_words = ["not", "never", "no", "none", "neither", "nor",
+                         "fail", "reject", "deny", "refuse", "negative"]
+        
+        positive_words = ["good", "great", "excellent", "positive", "well", 
+                         "success", "approve", "accept", "yes"]
+        
+        sent_text = sent.text.lower()
+        
+        if any(word in sent_text for word in negative_words):
+            return "negative"
+        elif any(word in sent_text for word in positive_words):
+            return "positive"
+        
+        # Default to neutral
+        return "neutral"
+    
+    def _determine_directness(self, sent, subj, verb, obj) -> str:
+        """Determine the directness of a relationship."""
+        # Check for modal verbs indicating indirectness
+        modal_verbs = ["may", "might", "could", "can", "would", "should", "possibly", 
+                      "perhaps", "potentially", "likely", "unlikely"]
+        
+        if any(word in sent.text.lower() for word in modal_verbs):
+            return "indirect"
+        
+        # Check for speculative language
+        speculation_words = ["believe", "think", "assume", "suppose", "suggest", 
+                            "hypothesize", "theory", "possible", "potential", 
+                            "maybe", "perhaps"]
+        
+        if any(word in sent.text.lower() for word in speculation_words):
+            return "indirect"
+        
+        # Default to direct
+        return "direct"
+    
+    def _generate_node_embeddings(self, G: nx.Graph) -> Dict[Any, List[float]]:
+        """Generate embeddings for graph nodes."""
+        embeddings = {}
+        
+        for node in G.nodes():
+            # Get node attributes
+            attrs = G.nodes[node]
+            
+            # Generate a consistent pseudo-random embedding based on node attributes
+            seed = abs(hash(str(attrs))) % 10000
+            np.random.seed(seed)
+            
+            # Generate embedding
+            embed_size = 16  # Simplified embedding size
+            embeddings[node] = np.random.randn(embed_size).tolist()
+        
+        return embeddings
+    
+    def _detect_communities(self, G: nx.Graph) -> Dict[Any, int]:
+        """Detect communities in the graph."""
+        try:
+            # Use connected components as simple communities
+            components = list(nx.connected_components(G))
+            
+            # Assign community IDs
+            communities = {}
+            for i, component in enumerate(components):
+                for node in component:
+                    communities[node] = i
+                    
+            return communities
+            
+        except Exception as e:
+            # Fallback approach
+            return {node: 0 for node in G.nodes()}
+    
+    def _calculate_graph_metrics(self, G: nx.Graph) -> Dict[str, Any]:
+        """Calculate metrics for the graph."""
+        metrics = {
+            "node_count": G.number_of_nodes(),
+            "edge_count": G.number_of_edges(),
+            "density": nx.density(G)
+        }
+        
+        # Calculate connected components
+        try:
+            components = list(nx.connected_components(G))
+            metrics["connected_components"] = len(components)
+            metrics["largest_component_size"] = len(max(components, key=len))
+        except:
+            metrics["connected_components"] = "N/A"
+            metrics["largest_component_size"] = "N/A"
+        
+        # Degree statistics
+        degrees = [d for _, d in G.degree()]
+        metrics["degree_stats"] = {
+            "max_degree": max(degrees) if degrees else 0,
+            "avg_degree": sum(degrees) / len(degrees) if degrees else 0,
+            "min_degree": min(degrees) if degrees else 0
+        }
+        
+        # Count edge types
+        edge_types = {}
+        polarities = {"positive": 0, "negative": 0, "neutral": 0}
+        directness = {"direct": 0, "indirect": 0}
+        
+        for _, _, data in G.edges(data=True):
+            edge_type = data.get("type", "unknown")
+            edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
+            
+            if "polarity" in data:
+                polarities[data["polarity"]] = polarities.get(data["polarity"], 0) + 1
+                
+            if "directness" in data:
+                directness[data["directness"]] = directness.get(data["directness"], 0) + 1
+        
+        metrics["edge_types"] = edge_types
+        metrics["polarities"] = polarities
+        metrics["directness"] = directness
+        
+        return metrics
+    
+    def _prepare_graph_data(self, G: nx.Graph, embeddings: Dict[Any, List[float]], 
+                           communities: Dict[Any, int]) -> Dict[str, Any]:
+        """Prepare graph data for output."""
+        # Prepare nodes
+        nodes = []
+        for node in G.nodes():
+            node_data = G.nodes[node].copy()
+            node_data["id"] = node
+            node_data["embedding"] = embeddings.get(node, [])
+            node_data["community"] = communities.get(node, 0)
+            nodes.append(node_data)
+        
+        # Prepare edges
+        edges = []
+        for u, v, data in G.edges(data=True):
+            edge_data = data.copy()
+            edge_data["source"] = u
+            edge_data["target"] = v
+            edges.append(edge_data)
+        
+        # Generate RDF-like triples
+        triples = []
+        for u, v, data in G.edges(data=True):
+            if data.get("type") == "semantic":
+                # Create an RDF-like triple
+                source_text = G.nodes[u].get("word", str(u))
+                relation = data.get("relation", "related_to")
+                target_text = G.nodes[v].get("word", str(v))
+                
+                triple = (source_text, relation, target_text)
+                
+                # Add metadata triples
+                triples.append(triple)
+                
+                # Add polarity if not neutral
+                if data.get("polarity", "neutral") != "neutral":
+                    polarity_triple = (
+                        f"{source_text}_{relation}_{target_text}",
+                        "has_polarity",
+                        data.get("polarity", "neutral")
+                    )
+                    triples.append(polarity_triple)
+                
+                # Add directness if indirect
+                if data.get("directness", "direct") == "indirect":
+                    directness_triple = (
+                        f"{source_text}_{relation}_{target_text}",
+                        "has_directness",
+                        "indirect"
+                    )
+                    triples.append(directness_triple)
+        
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "rdf_triples": triples
+        }
+    
+    def _log_operation(self, operation: str, metrics: Dict[str, Any]) -> None:
+        """Log operations to file."""
+        os.makedirs("logs", exist_ok=True)
+        
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "metrics": metrics
+        }
+        
+        with open("logs/graphsage_operations.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+graphsage_model.py
+import os
+import json
+import time
+import numpy as np
+import networkx as nx
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+class GraphSageModel:
+    """
+    GraphSage-inspired model for analyzing and learning from semantic graphs.
+    This is a simplified implementation that focuses on capturing node neighborhoods
+    and aggregating information from them.
+    """
+    
+    def __init__(self, hidden_dims=16, num_samples=10, num_layers=2):
+        """Initialize the GraphSage model."""
+        self.hidden_dims = hidden_dims
+        self.num_samples = num_samples
+        self.num_layers = num_layers
+        
+        # Create logs directory
+        os.makedirs("logs", exist_ok=True)
+        
+        # Log initialization
+        self._log_operation("initialize", {
+            "model": "GraphSage",
+            "hidden_dims": hidden_dims,
+            "num_samples": num_samples,
+            "num_layers": num_layers,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def analyze_graph(self, graph_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze a graph using GraphSage-inspired approach.
+        
+        Args:
+            graph_data: Dictionary with nodes, edges, and RDF triples
+            
+        Returns:
+            Dictionary with analysis results
+        """
+        start_time = time.time()
+        
+        # Convert to NetworkX graph
+        G = self._create_graph(graph_data)
+        
+        # Generate embeddings for nodes
+        node_embeddings = self._generate_node_embeddings(G)
+        
+        # Analyze node neighborhoods
+        neighborhood_analysis = self._analyze_neighborhoods(G)
+        
+        # Predict node similarities
+        node_similarities = self._calculate_node_similarities(G, node_embeddings)
+        
+        # Identify central concepts
+        central_concepts = self._identify_central_concepts(G)
+        
+        # Log operation
+        self._log_operation("analyze_graph", {
+            "num_nodes": G.number_of_nodes(),
+            "num_edges": G.number_of_edges(),
+            "processing_time": time.time() - start_time
+        })
+        
+        return {
+            "node_embeddings": {str(node): emb for node, emb in node_embeddings.items()},
+            "neighborhood_analysis": neighborhood_analysis,
+            "node_similarities": node_similarities,
+            "central_concepts": central_concepts,
+            "processing_time": time.time() - start_time
+        }
+    
+    def _create_graph(self, graph_data: Dict[str, Any]) -> nx.Graph:
+        """Create a NetworkX graph from graph data."""
+        G = nx.Graph()
+        
+        # Add nodes
+        for node in graph_data.get("nodes", []):
+            # Extract node attributes
+            node_id = node.get("id")
+            if node_id is not None:
+                attrs = {k: v for k, v in node.items() if k != "id"}
+                G.add_node(node_id, **attrs)
+        
+        # Add edges
+        for edge in graph_data.get("edges", []):
+            source = edge.get("source")
+            target = edge.get("target")
+            if source is not None and target is not None:
+                # Extract edge attributes
+                attrs = {k: v for k, v in edge.items() if k not in ["source", "target"]}
+                G.add_edge(source, target, **attrs)
+        
+        return G
+    
+    def _generate_node_embeddings(self, G: nx.Graph) -> Dict[Any, List[float]]:
+        """
+        Generate node embeddings using GraphSage-like neighborhood aggregation.
+        This is a simplified implementation that demonstrates the concept.
+        """
+        # Initial node features based on node attributes
+        initial_features = {}
+        for node in G.nodes():
+            # Use consistent seed for deterministic results
+            seed = abs(hash(str(node))) % 10000
+            np.random.seed(seed)
+            
+            # Generate initial features
+            initial_features[node] = np.random.randn(self.hidden_dims)
+        
+        # Multi-layer aggregation
+        current_features = initial_features
+        for layer in range(self.num_layers):
+            next_features = {}
+            
+            for node in G.nodes():
+                # Get neighbors
+                neighbors = list(G.neighbors(node))
+                
+                if not neighbors:
+                    # If no neighbors, keep current features
+                    next_features[node] = current_features[node]
+                    continue
+                
+                # Sample neighbors if there are too many
+                if len(neighbors) > self.num_samples:
+                    np.random.seed(abs(hash(str(node) + str(layer))) % 10000)
+                    neighbors = np.random.choice(neighbors, self.num_samples, replace=False)
+                
+                # Aggregate neighbor features
+                neighbor_feats = np.array([current_features[nbr] for nbr in neighbors])
+                neighbor_agg = np.mean(neighbor_feats, axis=0)
+                
+                # Combine with current features
+                combined = np.concatenate([current_features[node], neighbor_agg])
+                
+                # Dimension reduction
+                next_features[node] = combined[:self.hidden_dims]
+            
+            current_features = next_features
+        
+        # Convert to list for JSON serialization
+        return {node: feat.tolist() for node, feat in current_features.items()}
+    
+    def _analyze_neighborhoods(self, G: nx.Graph) -> Dict[str, Any]:
+        """Analyze node neighborhoods in the graph."""
+        neighborhood_info = {}
+        
+        for node in G.nodes():
+            # Get neighbors
+            neighbors = list(G.neighbors(node))
+            
+            # Get neighbor attributes
+            neighbor_types = {}
+            for nbr in neighbors:
+                nbr_type = G.nodes[nbr].get("type", "unknown")
+                neighbor_types[nbr_type] = neighbor_types.get(nbr_type, 0) + 1
+            
+            # Get edge types to neighbors
+            edge_types = {}
+            for nbr in neighbors:
+                edge_type = G.edges[node, nbr].get("type", "unknown")
+                edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
+            
+            # Store neighborhood information
+            neighborhood_info[str(node)] = {
+                "degree": len(neighbors),
+                "neighbor_types": neighbor_types,
+                "edge_types": edge_types
+            }
+        
+        return neighborhood_info
+    
+    def _calculate_node_similarities(self, G: nx.Graph, embeddings: Dict[Any, List[float]]) -> List[Dict[str, Any]]:
+        """Calculate similarities between nodes based on embeddings."""
+        # Convert embeddings to numpy arrays
+        np_embeddings = {node: np.array(emb) for node, emb in embeddings.items()}
+        
+        # Find similar nodes
+        similarities = []
+        
+        # Limit to a reasonable number of nodes to avoid quadratic computation
+        nodes = list(G.nodes())
+        if len(nodes) > 20:
+            np.random.seed(42)  # For reproducibility
+            nodes = np.random.choice(nodes, 20, replace=False)
+        
+        for i, node1 in enumerate(nodes):
+            for node2 in nodes[i+1:]:
+                if node1 in np_embeddings and node2 in np_embeddings:
+                    # Calculate cosine similarity
+                    emb1 = np_embeddings[node1]
+                    emb2 = np_embeddings[node2]
+                    
+                    sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
+                    
+                    # Only include higher similarities
+                    if sim > 0.7:
+                        # Get node texts
+                        node1_text = G.nodes[node1].get("word", str(node1))
+                        node2_text = G.nodes[node2].get("word", str(node2))
+                        
+                        similarities.append({
+                            "node1": str(node1),
+                            "node2": str(node2),
+                            "node1_text": node1_text,
+                            "node2_text": node2_text,
+                            "similarity": float(sim)
+                        })
+        
+        # Sort by similarity (highest first)
+        similarities.sort(key=lambda x: x["similarity"], reverse=True)
+        
+        return similarities[:10]  # Return top 10
+    
+    def _identify_central_concepts(self, G: nx.Graph) -> List[Dict[str, Any]]:
+        """Identify central concepts in the graph."""
+        # Calculate various centrality measures
+        try:
+            degree_cent = nx.degree_centrality(G)
+            betweenness_cent = nx.betweenness_centrality(G)
+            closeness_cent = nx.closeness_centrality(G)
+            
+            # Combine centrality measures
+            combined_centrality = {}
+            for node in G.nodes():
+                combined_centrality[node] = (
+                    degree_cent.get(node, 0) +
+                    betweenness_cent.get(node, 0) +
+                    closeness_cent.get(node, 0)
+                ) / 3.0
+                
+            # Sort nodes by centrality
+            central_nodes = sorted(
+                combined_centrality.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            # Prepare results
+            central_concepts = []
+            for node, score in central_nodes[:5]:  # Top 5
+                node_text = G.nodes[node].get("word", str(node))
+                node_type = G.nodes[node].get("type", "unknown")
+                
+                central_concepts.append({
+                    "node": str(node),
+                    "text": node_text,
+                    "type": node_type,
+                    "centrality": score
+                })
+                
+            return central_concepts
+            
+        except Exception as e:
+            # Fallback to degree if other centrality calculations fail
+            degrees = {node: G.degree(node) for node in G.nodes()}
+            
+            # Sort by degree
+            top_nodes = sorted(degrees.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            # Format results
+            central_concepts = []
+            for node, degree in top_nodes:
+                node_text = G.nodes[node].get("word", str(node))
+                node_type = G.nodes[node].get("type", "unknown")
+                
+                central_concepts.append({
+                    "node": str(node),
+                    "text": node_text,
+                    "type": node_type,
+                    "centrality": degree / max(degrees.values()) if degrees else 0
+                })
+                
+            return central_concepts
+    
+    def _log_operation(self, operation: str, metrics: Dict[str, Any]) -> None:
+        """Log operations to file."""
+        os.makedirs("logs", exist_ok=True)
+        
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "metrics": metrics
+        }
+        
+        with open("logs/graphsage_model_operations.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
