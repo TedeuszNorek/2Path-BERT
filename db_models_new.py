@@ -1,22 +1,8 @@
-import os
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, URL
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-
-# Get database URL from environment variables
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
-
-# Use connection pooling with more conservative settings for better stability
-engine = create_engine(
-    DATABASE_URL if DATABASE_URL else 'postgresql://user:password@localhost/db',
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=1800,  # Recycle connections after 30 minutes
-    echo=False,         # Set to True for SQL query debugging
-    connect_args={"connect_timeout": 15}  # Connection timeout in seconds
-)
+from sqlalchemy.orm import relationship
+from db_connection import engine
 
 # Create declarative base
 Base = declarative_base()
@@ -76,14 +62,3 @@ class Entity(Base):
 
 # Create all tables
 Base.metadata.create_all(engine)
-
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Function to get database session
-def get_db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
