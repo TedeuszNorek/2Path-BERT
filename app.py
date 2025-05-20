@@ -71,8 +71,223 @@ This application extracts and visualizes semantic relationships from text using 
 Extract subject-predicate-object triples, analyze relationship patterns, and explore knowledge graphs.
 """)
 
+# Create tabs for main functionality and database explorer
+main_tab, database_tab = st.tabs(["Analyzer", "Database Explorer"])
+
+# Database Explorer tab content
+with database_tab:
+    st.header("Database Explorer")
+    
+    # Get data from database
+    with get_db() as db:
+        analysis_count = db_utils.get_analysis_count(db)
+        relationship_count = db_utils.get_relationship_count(db)
+        recent_analyses = db_utils.get_recent_analyses(db, limit=10)
+        top_entities = db_utils.get_top_entities(db, limit=20)
+    
+    # Display database statistics
+    st.subheader("Database Overview")
+    col1, col2 = st.columns(2)
+    col1.metric("Total Analyses", analysis_count)
+    col2.metric("Total Relationships", relationship_count)
+    
+    # Display top entities
+    if top_entities:
+        st.subheader("Top Entities")
+        
+        # Create DataFrame
+        entity_df = pd.DataFrame([
+            {"Entity": entity.name, "Occurrences": entity.count}
+            for entity in top_entities
+        ])
+        
+        # Display bar chart
+        entity_chart = px.bar(
+            entity_df, 
+            x="Entity", 
+            y="Occurrences",
+            title="Most Common Entities in Knowledge Base",
+            color="Occurrences",
+            color_continuous_scale="Viridis"
+        )
+        entity_chart.update_layout(xaxis={'categoryorder':'total descending'})
+        st.plotly_chart(entity_chart, use_container_width=True)
+    
+    # Recent analyses
+    if recent_analyses:
+        st.subheader("Recent Analyses")
+        
+        # Create dataframe
+        analyses_df = pd.DataFrame([
+            {
+                "ID": analysis.id,
+                "Title": analysis.title or "Untitled",
+                "Date": analysis.timestamp.strftime("%Y-%m-%d %H:%M"),
+                "Text Length": len(analysis.text)
+            }
+            for analysis in recent_analyses
+        ])
+        
+        # Display table
+        st.dataframe(
+            analyses_df,
+            use_container_width=True,
+            column_config={
+                "ID": st.column_config.NumberColumn("ID", help="Analysis ID"),
+                "Title": st.column_config.TextColumn("Title", help="Analysis title"),
+                "Date": st.column_config.TextColumn("Date", help="Analysis date and time"),
+                "Text Length": st.column_config.NumberColumn("Text Length", help="Length of analyzed text in characters")
+            }
+        )
+        
+        # Selected analysis details
+        selected_analysis_id = st.selectbox(
+            "Select an analysis to view details",
+            options=[analysis.id for analysis in recent_analyses],
+            format_func=lambda x: f"#{x}: {next((a.title or 'Untitled' for a in recent_analyses if a.id == x), '')}"
+        )
+        
+        if selected_analysis_id:
+            with get_db() as db:
+                # Get analysis and its relationships
+                analysis = db_utils.get_analysis_by_id(db, selected_analysis_id)
+                relationships = db_utils.get_relationships_by_analysis_id(db, selected_analysis_id)
+                
+                if analysis:
+                    # Display analysis details
+                    st.subheader(f"Analysis #{analysis.id}: {analysis.title or 'Untitled'}")
+                    st.caption(f"Created on {analysis.timestamp.strftime('%Y-%m-%d %H:%M')}")
+                    
+                    # Display text in expander
+                    with st.expander("View Text"):
+                        st.text_area("Analyzed Text", analysis.text, height=150, disabled=True)
+                    
+                    if relationships:
+                        # Create DataFrame for relationships
+                        rel_df = pd.DataFrame([
+                            {
+                                "Subject": rel.subject,
+                                "Predicate": rel.predicate,
+                                "Object": rel.object,
+                                "Confidence": rel.confidence,
+                                "Polarity": rel.polarity,
+                                "Directness": rel.directness
+                            }
+                            for rel in relationships
+                        ])
+                        
+                        # Display relationships
+                        st.subheader("Extracted Relationships")
+                        st.dataframe(
+                            rel_df,
+                            use_container_width=True,
+                            column_config={
+                                "Confidence": st.column_config.ProgressColumn(
+                                    "Confidence",
+                                    help="Confidence score of the extracted relationship",
+                                    format="%.2f",
+                                    min_value=0,
+                                    max_value=1,
+                                )
+                            }
+                        )
+                        
+                        # Create and display graph visualization
+                        st.subheader("Relationship Graph")
+                        
+                        # Convert relationships to format needed for graph
+                        rel_dicts = []
+                        for rel in relationships:
+                            rel_dict = {
+                                "subject": rel.subject,
+                                "predicate": rel.predicate,
+                                "object": rel.object,
+                                "confidence": rel.confidence,
+                                "polarity": rel.polarity,
+                                "directness": rel.directness,
+                                "sentence": rel.sentence
+                            }
+                            rel_dicts.append(rel_dict)
+                        
+                        # Build graph
+                        graph = graph_utils.build_networkx_graph(rel_dicts)
+                        communities = graph_utils.get_community_structure(graph)
+                        
+                        # Create visualization
+                        fig = create_relationship_graph_figure(
+                            graph,
+                            community_map=communities,
+                            title=f"Relationship Graph for Analysis #{analysis.id}"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Option to delete the analysis
+                        if st.button("Delete Analysis", use_container_width=True, type="primary"):
+                            with get_db() as db:
+                                if db_utils.delete_analysis(db, analysis.id):
+                                    st.success(f"Analysis #{analysis.id} deleted successfully")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete analysis")
+                    else:
+                        st.info("No relationships found for this analysis.")
+    else:
+        st.info("No analyses found in the database. Process some text and save it to get started.")
+
 # Sidebar configuration
 st.sidebar.header("Input Options")
+
+# Get database statistics
+with get_db() as db:
+    analysis_count = db_utils.get_analysis_count(db)
+    relationship_count = db_utils.get_relationship_count(db)
+
+# Database stats in sidebar
+st.sidebar.caption(f"Database: {analysis_count} analyses, {relationship_count} relationships")
+
+# Database options in expander
+with st.sidebar.expander("Saved Analyses"):
+    with get_db() as db:
+        recent_analyses = db_utils.get_recent_analyses(db, limit=5)
+        
+        if recent_analyses:
+            selected_analysis = st.selectbox(
+                "Load saved analysis",
+                options=[f"#{a.id}: {a.title or 'Untitled'} ({a.timestamp.strftime('%Y-%m-%d')})" for a in recent_analyses],
+                index=None,
+                placeholder="Select an analysis..."
+            )
+            
+            if selected_analysis:
+                # Extract analysis ID from selection
+                analysis_id = int(selected_analysis.split(":")[0][1:])
+                
+                # Load button
+                if st.button("Load Selected Analysis", use_container_width=True):
+                    with get_db() as db:
+                        analysis = db_utils.get_analysis_by_id(db, analysis_id)
+                        if analysis:
+                            st.session_state.current_text = analysis.text
+                            relationships = db_utils.get_relationships_by_analysis_id(db, analysis_id)
+                            
+                            # Convert to the format expected by the app
+                            rel_dicts = []
+                            for rel in relationships:
+                                rel_dict = {
+                                    "subject": rel.subject,
+                                    "predicate": rel.predicate,
+                                    "object": rel.object,
+                                    "confidence": rel.confidence,
+                                    "polarity": rel.polarity,
+                                    "directness": rel.directness,
+                                    "sentence": rel.sentence
+                                }
+                                rel_dicts.append(rel_dict)
+                            
+                            # Process loaded data
+                            st.rerun()
+        else:
+            st.caption("No saved analyses found")
 
 # Input method selection
 input_method = st.sidebar.radio(
@@ -176,76 +391,105 @@ with st.sidebar.expander("Advanced Options"):
         help="Enter an entity name to highlight in visualizations"
     )
 
-# Process button
-process_button = st.sidebar.button("Process Text", use_container_width=True)
+# Add title field and save option
+analysis_title = st.sidebar.text_input("Analysis Title (for saving)", "", help="Optional title when saving this analysis")
+
+# Process and save options
+col1, col2 = st.sidebar.columns(2)
+process_button = col1.button("Process Text", use_container_width=True)
+save_button = col2.button("Save to DB", use_container_width=True, disabled=(not st.session_state.processed_data))
 
 # Main body of the app
-if process_button and text_for_analysis:
-    # Store the current text in session state
-    st.session_state.current_text = text_for_analysis
-    
-    # Create processing container
-    with st.spinner("Processing text..."):
-        # Clear previous results
-        st.session_state.processed_data = None
-        st.session_state.graph = None
-        st.session_state.rgcn_result = None
+with main_tab:
+    # Handle save button click
+    if save_button and st.session_state.processed_data:
+        with st.spinner("Saving analysis to database..."):
+            with get_db() as db:
+                # Save analysis with title if provided
+                title = analysis_title if analysis_title else None
+                analysis = db_utils.save_analysis(
+                    db=db,
+                    text=st.session_state.current_text,
+                    relationships=st.session_state.processed_data.get("filtered_relationships", []),
+                    title=title
+                )
+                
+                # Show success message
+                st.success(f"Analysis saved to database with ID: {analysis.id}")
+                
+                # Reset title field
+                analysis_title = ""
+                
+                # Force rerun to update database stats
+                st.rerun()
+
+    # Handle process button click
+    if process_button and text_for_analysis:
+        # Store the current text in session state
+        st.session_state.current_text = text_for_analysis
         
-        try:
-            # Step 1: Process text with BART
-            start_time = time.time()
-            processed_data = st.session_state.bart_processor.extract_relationships(text_for_analysis)
-            bart_time = time.time() - start_time
+        # Create processing container
+        with st.spinner("Processing text..."):
+            # Clear previous results
+            st.session_state.processed_data = None
+            st.session_state.graph = None
+            st.session_state.rgcn_result = None
             
-            # Filter relationships by confidence
-            filtered_relationships = [
-                rel for rel in processed_data["relationships"]
-                if rel["confidence"] >= min_confidence
-            ]
-            
-            # Filter by polarity and directness if needed
-            if not show_negative:
+            try:
+                # Step 1: Process text with BART
+                start_time = time.time()
+                processed_data = st.session_state.bart_processor.extract_relationships(text_for_analysis)
+                bart_time = time.time() - start_time
+                
+                # Filter relationships by confidence
                 filtered_relationships = [
-                    rel for rel in filtered_relationships
-                    if rel["polarity"] != "negative"
+                    rel for rel in processed_data["relationships"]
+                    if rel["confidence"] >= min_confidence
                 ]
                 
-            if not show_indirect:
-                filtered_relationships = [
-                    rel for rel in filtered_relationships
-                    if rel["directness"] != "indirect"
-                ]
+                # Filter by polarity and directness if needed
+                if not show_negative:
+                    filtered_relationships = [
+                        rel for rel in filtered_relationships
+                        if rel["polarity"] != "negative"
+                    ]
+                    
+                if not show_indirect:
+                    filtered_relationships = [
+                        rel for rel in filtered_relationships
+                        if rel["directness"] != "indirect"
+                    ]
+                    
+                # Update the processed data with filtered relationships
+                processed_data["filtered_relationships"] = filtered_relationships
                 
-            # Update the processed data with filtered relationships
-            processed_data["filtered_relationships"] = filtered_relationships
-            
-            # Step 2: Build graph
-            start_time = time.time()
-            graph = graph_utils.build_networkx_graph(filtered_relationships)
-            graph_time = time.time() - start_time
-            
-            # Step 3: Process with RGCN
-            start_time = time.time()
-            rgcn_result = st.session_state.rgcn_processor.process_relationships(filtered_relationships)
-            rgcn_time = time.time() - start_time
-            
-            # Step 4: Apply RGCN layout to graph
-            graph_with_layout = graph_utils.apply_rgcn_layout(
-                graph,
-                rgcn_result["embeddings"],
-                rgcn_result["entity_to_idx"]
-            )
-            
-            # Store results in session state
-            st.session_state.processed_data = processed_data
-            st.session_state.graph = graph_with_layout
-            st.session_state.rgcn_result = rgcn_result
-            
-            # Show timing info
-            st.info(f"Processing completed: BART: {bart_time:.2f}s, Graph: {graph_time:.2f}s, RGCN: {rgcn_time:.2f}s")
-            
-        except Exception as e:
-            st.error(f"Error processing text: {str(e)}")
+                # Step 2: Build graph
+                start_time = time.time()
+                graph = graph_utils.build_networkx_graph(filtered_relationships)
+                graph_time = time.time() - start_time
+                
+                # Step 3: Process with RGCN
+                start_time = time.time()
+                rgcn_result = st.session_state.rgcn_processor.process_relationships(filtered_relationships)
+                rgcn_time = time.time() - start_time
+                
+                # Step 4: Apply RGCN layout to graph
+                graph_with_layout = graph_utils.apply_rgcn_layout(
+                    graph,
+                    rgcn_result["embeddings"],
+                    rgcn_result["entity_to_idx"]
+                )
+                
+                # Store results in session state
+                st.session_state.processed_data = processed_data
+                st.session_state.graph = graph_with_layout
+                st.session_state.rgcn_result = rgcn_result
+                
+                # Show timing info
+                st.info(f"Processing completed: BART: {bart_time:.2f}s, Graph: {graph_time:.2f}s, RGCN: {rgcn_time:.2f}s")
+                
+            except Exception as e:
+                st.error(f"Error processing text: {str(e)}")
 
 # Display results if available
 if st.session_state.processed_data and st.session_state.graph:
