@@ -1,393 +1,340 @@
 import plotly.graph_objects as go
+import plotly.express as px
 import networkx as nx
 import numpy as np
-from typing import Dict, List, Any, Tuple
-import colorsys
+from typing import Dict, List, Tuple, Optional, Any
 
-def generate_color_palette(n: int) -> List[str]:
+def create_relationship_graph_figure(
+    graph: nx.DiGraph,
+    community_map: Optional[Dict[str, int]] = None,
+    highlight_nodes: Optional[List[str]] = None,
+    highlight_edges: Optional[List[Tuple[str, str]]] = None,
+    title: str = "Semantic Relationship Graph"
+) -> go.Figure:
     """
-    Generate a visually distinct color palette.
+    Create a Plotly figure for visualizing relationship graphs.
     
     Args:
-        n: Number of colors to generate
+        graph: NetworkX DiGraph object
+        community_map: Dict mapping nodes to community IDs
+        highlight_nodes: List of nodes to highlight
+        highlight_edges: List of edges (as tuples) to highlight
+        title: Title for the figure
         
     Returns:
-        List of hexadecimal color codes
+        Plotly figure object
     """
-    colors = []
-    for i in range(n):
-        # Use HSV color space for even distribution
-        h = i / n
-        s = 0.7
-        v = 0.95
-        
-        # Convert to RGB
-        r, g, b = colorsys.hsv_to_rgb(h, s, v)
-        
-        # Convert to hex
-        hex_color = f'#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}'
-        colors.append(hex_color)
-        
-    return colors
-
-def create_relationship_graph_figure(G: nx.DiGraph, 
-                                   community_map: Dict[str, int] = None, 
-                                   node_size_factor: float = 20,
-                                   edge_width_factor: float = 2,
-                                   highlight_nodes: List[str] = None,
-                                   highlight_edges: List[Tuple[str, str]] = None,
-                                   title: str = "Semantic Relationship Graph") -> go.Figure:
-    """
-    Create a Plotly figure to visualize the relationship graph.
+    # Set default values if None is provided
+    if community_map is None:
+        community_map = {}
     
-    Args:
-        G: NetworkX DiGraph
-        community_map: Optional mapping of nodes to communities
-        node_size_factor: Factor to scale node sizes
-        edge_width_factor: Factor to scale edge widths
-        highlight_nodes: List of node IDs to highlight
-        highlight_edges: List of edge tuples to highlight
-        title: Figure title
-        
-    Returns:
-        Plotly figure
-    """
-    # Get node positions - if not present, compute using spring layout
-    positions = {}
-    for node in G.nodes():
-        if 'pos' in G.nodes[node]:
-            positions[node] = G.nodes[node]['pos']
+    if highlight_nodes is None:
+        highlight_nodes = []
     
-    if not positions:
-        positions = nx.spring_layout(G, seed=42)
+    if highlight_edges is None:
+        highlight_edges = []
     
-    # Get node sizes based on degree
-    node_degrees = dict(G.degree())
-    node_sizes = {node: node_size_factor * (1 + node_degrees.get(node, 0)) 
-                 for node in G.nodes()}
+    # Create a position attribute if it doesn't exist
+    if not any('pos' in graph.nodes[node] for node in graph.nodes):
+        pos = nx.spring_layout(graph, seed=42)
+        nx.set_node_attributes(graph, {node: position for node, position in pos.items()}, 'pos')
     
-    # Prepare node traces
+    # Get node positions
+    pos = {node: data.get('pos', [0, 0]) for node, data in graph.nodes(data=True)}
+    
+    # Prepare node data
     node_x = []
     node_y = []
     node_text = []
     node_size = []
     node_color = []
     
-    # If we have community data, prepare colors
-    if community_map:
-        num_communities = max(community_map.values()) + 1
-        colors = generate_color_palette(max(3, num_communities))
-    else:
-        colors = ['#636EFA']  # Default blue color
+    # Assign colors based on communities
+    default_color = 0
     
-    # Create highlight set for O(1) lookups
-    highlight_node_set = set(highlight_nodes) if highlight_nodes else set()
+    # Calculate node sizes based on degree
+    degrees = dict(graph.degree())
+    max_degree = max(degrees.values()) if degrees else 1
+    min_size, max_size = 10, 30
     
-    # Collect node data
-    for node in G.nodes():
-        x, y = positions[node]
+    for node in graph.nodes():
+        x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
+        node_text.append(node)
         
-        # Generate node text with info
-        text = f"<b>{node}</b><br>"
-        text += f"Connections: {node_degrees.get(node, 0)}<br>"
-        if 'count' in G.nodes[node]:
-            text += f"Occurrences: {G.nodes[node]['count']}<br>"
-        node_text.append(text)
+        # Size based on degree
+        size = min_size + (degrees[node] / max_degree) * (max_size - min_size)
+        node_size.append(size)
         
-        # Set node size
-        node_size.append(node_sizes.get(node, node_size_factor))
-        
-        # Set node color based on community or highlight
-        if node in highlight_node_set:
-            node_color.append('#FF0000')  # Red for highlighted nodes
-        elif community_map and node in community_map:
-            community_id = community_map[node]
-            node_color.append(colors[community_id % len(colors)])
-        else:
-            node_color.append(colors[0])
+        # Color based on community or default
+        color = community_map.get(node, default_color)
+        node_color.append(color)
     
-    # Create node trace
-    node_trace = go.Scatter(
+    # Highlight specific nodes if requested
+    highlighted_x = []
+    highlighted_y = []
+    highlighted_text = []
+    
+    for node in highlight_nodes:
+        if node in graph.nodes():
+            x, y = pos[node]
+            highlighted_x.append(x)
+            highlighted_y.append(y)
+            highlighted_text.append(node)
+    
+    # Create edge traces
+    edge_x = []
+    edge_y = []
+    edge_text = []
+    
+    # Create highlighted edge traces
+    highlighted_edge_x = []
+    highlighted_edge_y = []
+    highlighted_edge_text = []
+    
+    for edge in graph.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        
+        edge_data = graph.get_edge_data(edge[0], edge[1])
+        predicate = edge_data.get('predicate', '')
+        confidence = edge_data.get('confidence', 0.0)
+        polarity = edge_data.get('polarity', 'neutral')
+        
+        # Edge label
+        edge_label = f"{edge[0]} --[{predicate}]--> {edge[1]}<br>Confidence: {confidence:.2f}<br>Polarity: {polarity}"
+        
+        # Check if this is a highlighted edge
+        if edge in highlight_edges:
+            highlighted_edge_x.extend([x0, x1, None])
+            highlighted_edge_y.extend([y0, y1, None])
+            highlighted_edge_text.append(edge_label)
+        else:
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+            edge_text.append(edge_label)
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Add edges
+    fig.add_trace(go.Scatter(
+        x=edge_x, y=edge_y, 
+        line=dict(width=0.8, color='#cccccc'),
+        hoverinfo='text',
+        text=edge_text,
+        mode='lines',
+        name='Relationships'
+    ))
+    
+    # Add highlighted edges
+    if highlighted_edge_x:
+        fig.add_trace(go.Scatter(
+            x=highlighted_edge_x, y=highlighted_edge_y, 
+            line=dict(width=2, color='red'),
+            hoverinfo='text',
+            text=highlighted_edge_text,
+            mode='lines',
+            name='Highlighted Relationships'
+        ))
+    
+    # Add nodes
+    fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
         mode='markers',
         hoverinfo='text',
         text=node_text,
         marker=dict(
-            color=node_color,
             size=node_size,
-            line=dict(width=1, color='#888'),
-            symbol='circle'
+            color=node_color,
+            colorscale='Viridis',
+            line_width=2,
+            line=dict(color='white')
         ),
         name='Entities'
-    )
+    ))
     
-    # Prepare edge traces
-    edge_traces = []
+    # Add highlighted nodes
+    if highlighted_x:
+        fig.add_trace(go.Scatter(
+            x=highlighted_x, y=highlighted_y,
+            mode='markers',
+            hoverinfo='text',
+            text=highlighted_text,
+            marker=dict(
+                size=node_size,
+                color='red',
+                symbol='star',
+                line_width=2
+            ),
+            name='Highlighted Entities'
+        ))
     
-    # Group edges by predicate for legend
-    predicates = set()
-    for _, _, data in G.edges(data=True):
-        if 'predicate' in data:
-            predicates.add(data['predicate'])
+    # Add arrows for directed edges
+    arrow_x = []
+    arrow_y = []
     
-    # Create a color for each predicate
-    predicate_colors = {pred: color for pred, color in zip(predicates, generate_color_palette(len(predicates)))}
-    
-    # Create highlight set for edges
-    highlight_edge_set = set(highlight_edges) if highlight_edges else set()
-    
-    # Create a trace for each predicate
-    for predicate in predicates:
-        edge_x = []
-        edge_y = []
-        edge_text = []
-        edge_width = []
+    for edge in graph.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
         
-        for u, v, data in G.edges(data=True):
-            if data.get('predicate') == predicate:
-                # Get positions
-                x0, y0 = positions[u]
-                x1, y1 = positions[v]
-                
-                # For curved edges
-                xmid = (x0 + x1) / 2
-                ymid = (y0 + y1) / 2
-                
-                # Add a slight curve
-                # Move midpoint perpendicular to edge direction
-                dx = x1 - x0
-                dy = y1 - y0
-                edge_len = np.sqrt(dx*dx + dy*dy)
-                if edge_len > 0:
-                    # Normalize and rotate by 90 degrees
-                    nx, ny = -dy/edge_len, dx/edge_len
-                    xmid += nx * 0.03  # Small offset
-                    ymid += ny * 0.03
-                
-                # Add points for curved line
-                edge_x.extend([x0, xmid, x1, None])
-                edge_y.extend([y0, ymid, y1, None])
-                
-                # Edge text
-                confidence = data.get('confidence', 0.5)
-                polarity = data.get('polarity', 'neutral')
-                directness = data.get('directness', 'direct')
-                
-                text = f"<b>{predicate}</b><br>"
-                text += f"Confidence: {confidence:.2f}<br>"
-                text += f"Polarity: {polarity}<br>"
-                text += f"Directness: {directness}<br>"
-                if 'sentence' in data:
-                    text += f"Context: {data['sentence']}"
-                edge_text.append(text)
-                
-                # Edge width based on confidence and highlight status
-                width = edge_width_factor * (0.5 + confidence)
-                if (u, v) in highlight_edge_set:
-                    width *= 2  # Double width for highlighted edges
-                edge_width.append(width)
-        
-        if edge_x:  # Only create trace if there are edges
-            edge_trace = go.Scatter(
-                x=edge_x, y=edge_y,
-                line=dict(
-                    width=edge_width[0],  # All edges in this trace have the same width
-                    color=predicate_colors[predicate]
-                ),
-                hoverinfo='text',
-                text=edge_text * 4,  # Repeat text for each segment
-                mode='lines',
-                name=predicate,
-                opacity=0.8
-            )
-            edge_traces.append(edge_trace)
-    
-    # Build figure with all traces
-    fig = go.Figure(
-        data=edge_traces + [node_trace],
-        layout=go.Layout(
-            title=dict(text=title, x=0.5, xanchor='center', font=dict(size=16)),
-            showlegend=True,
-            legend=dict(title="Predicates & Entities"),
-            hovermode='closest',
-            margin=dict(b=20, l=5, r=5, t=40),
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            height=700,
-            plot_bgcolor='rgba(240,240,240,0.8)'
-        )
-    )
-    
-    # Add edge arrows
-    for u, v, data in G.edges(data=True):
-        # Get edge endpoints
-        x0, y0 = positions[u]
-        x1, y1 = positions[v]
-        
-        # Calculate direction vector
+        # Calculate arrow position (80% along the edge)
         dx = x1 - x0
         dy = y1 - y0
-        
-        # Normalize
-        length = np.sqrt(dx*dx + dy*dy)
-        if length > 0:
-            udx, udy = dx/length, dy/length
-        else:
-            continue  # Skip if points are identical
-            
-        # Calculate arrowhead position (pull back from endpoint)
-        node_radius = node_sizes[v] / 1000  # Scale down
-        ax = x1 - udx * node_radius
-        ay = y1 - udy * node_radius
-        
-        # Add arrow annotation
-        fig.add_annotation(
-            x=ax, y=ay,
-            ax=x1, ay=y1,
-            xref="x", yref="y", axref="x", ayref="y",
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=1.5,
-            arrowwidth=1,
-            arrowcolor=predicate_colors.get(data.get('predicate', 'default'), '#888')
+        arrow_x.append(x0 + 0.8 * dx)
+        arrow_y.append(y0 + 0.8 * dy)
+    
+    # Update layout
+    fig.update_layout(
+        title=title,
+        title_font_size=16,
+        showlegend=True,
+        hovermode='closest',
+        margin=dict(b=20, l=5, r=5, t=40),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
         )
+    )
     
     return fig
 
-def create_heatmap_figure(adjacency_matrix: np.ndarray, 
-                        labels: List[str],
-                        title: str = "Relationship Adjacency Matrix") -> go.Figure:
+def create_heatmap_figure(
+    matrix: np.ndarray,
+    labels: List[str],
+    title: str = "Relationship Adjacency Matrix"
+) -> go.Figure:
     """
-    Create a heatmap visualization of the adjacency matrix.
+    Create a heatmap figure for visualizing relationship matrices.
     
     Args:
-        adjacency_matrix: Adjacency matrix as NumPy array
-        labels: Node labels corresponding to matrix indices
-        title: Figure title
+        matrix: 2D numpy array containing the adjacency matrix
+        labels: List of entity labels
+        title: Title for the figure
         
     Returns:
-        Plotly heatmap figure
+        Plotly figure object
     """
+    # Create figure
     fig = go.Figure(data=go.Heatmap(
-        z=adjacency_matrix,
+        z=matrix,
         x=labels,
         y=labels,
         colorscale='Viridis',
         hoverongaps=False,
-        hoverinfo='text',
-        text=[[f"{labels[i]} → {labels[j]}: {adjacency_matrix[i,j]:.2f}" 
-              for j in range(len(labels))] 
-              for i in range(len(labels))]
+        colorbar=dict(title="Confidence")
     ))
     
+    # Update layout
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor='center'),
-        height=600,
-        width=600,
-        xaxis=dict(title='Target Entity'),
-        yaxis=dict(title='Source Entity'),
-        plot_bgcolor='rgba(240,240,240,0.8)'
+        title=title,
+        xaxis=dict(title="Target Entity"),
+        yaxis=dict(title="Source Entity"),
     )
     
     return fig
 
-def create_bar_chart(labels: List[str], values: List[float], 
-                   title: str, xaxis_title: str, yaxis_title: str) -> go.Figure:
+def create_bar_chart(
+    labels: List[str],
+    values: List[float],
+    title: str = "Distribution",
+    x_title: str = "Category",
+    y_title: str = "Count"
+) -> go.Figure:
     """
-    Create a bar chart visualization.
+    Create a bar chart figure.
     
     Args:
-        labels: Category labels
-        values: Values for each category
-        title: Chart title
-        xaxis_title: X-axis title
-        yaxis_title: Y-axis title
+        labels: List of category labels
+        values: List of corresponding values
+        title: Title for the figure
+        x_title: X-axis title
+        y_title: Y-axis title
         
     Returns:
-        Plotly bar chart figure
+        Plotly figure object
     """
+    # Create figure
     fig = go.Figure(data=go.Bar(
         x=labels,
         y=values,
         marker_color='rgb(55, 83, 109)'
     ))
     
+    # Update layout
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor='center'),
-        xaxis=dict(title=xaxis_title),
-        yaxis=dict(title=yaxis_title),
-        height=400,
-        plot_bgcolor='rgba(240,240,240,0.8)'
+        title=title,
+        xaxis=dict(title=x_title),
+        yaxis=dict(title=y_title),
     )
     
     return fig
 
-def create_sankey_diagram(G: nx.DiGraph, 
-                        weight_attr: str = 'confidence',
-                        title: str = "Relationship Flow Diagram") -> go.Figure:
+def create_sankey_diagram(
+    graph: nx.DiGraph,
+    weight_attr: str = 'weight',
+    title: str = "Relationship Flow Diagram"
+) -> go.Figure:
     """
-    Create a Sankey diagram of relationships.
+    Create a Sankey diagram for visualizing relationship flows.
     
     Args:
-        G: NetworkX DiGraph
-        weight_attr: Edge attribute to use as flow value
-        title: Diagram title
+        graph: NetworkX DiGraph object
+        weight_attr: Edge attribute to use for flow weights
+        title: Title for the figure
         
     Returns:
-        Plotly Sankey diagram figure
+        Plotly figure object
     """
-    # Get all nodes
-    all_nodes = list(G.nodes())
-    
-    if not all_nodes or not G.edges():
-        # Return empty figure if no data
-        return go.Figure()
-        
-    # Map node names to indices
-    node_map = {node: i for i, node in enumerate(all_nodes)}
+    # Extract nodes
+    nodes = list(graph.nodes())
+    node_indices = {node: i for i, node in enumerate(nodes)}
     
     # Prepare Sankey data
-    node_labels = all_nodes
     sources = []
     targets = []
     values = []
-    link_labels = []
+    labels = []
+    
+    # Add nodes to labels
+    for node in nodes:
+        labels.append(node)
     
     # Add edges
-    for u, v, data in G.edges(data=True):
-        sources.append(node_map[u])
-        targets.append(node_map[v])
+    for source, target, data in graph.edges(data=True):
+        sources.append(node_indices[source])
+        targets.append(node_indices[target])
         
-        # Use confidence or default value as flow
-        values.append(data.get(weight_attr, 1.0))
-        
-        # Use predicate as link label
-        link_labels.append(data.get('predicate', ''))
+        # Get weight, default to 1 if not found
+        weight = data.get(weight_attr, 1)
+        values.append(weight)
     
-    # Create Sankey diagram
+    # Create figure
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=15,
             thickness=20,
             line=dict(color="black", width=0.5),
-            label=node_labels,
-            color="rgba(31, 119, 180, 0.8)"
+            label=labels,
+            color="blue"
         ),
         link=dict(
             source=sources,
             target=targets,
-            value=values,
-            label=link_labels,
-            hovertemplate='%{source.label} → %{target.label}<br>Predicate: %{label}<br>Value: %{value:.2f}<extra></extra>'
+            value=values
         )
     )])
     
+    # Update layout
     fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor='center'),
-        height=600,
-        font=dict(size=10)
+        title=title,
+        font=dict(size=12)
     )
     
     return fig

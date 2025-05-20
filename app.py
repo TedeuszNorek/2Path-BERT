@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import os
 import time
-import networkx as nx
 from typing import Dict, List, Any, Tuple, Optional
 import plotly.graph_objects as go
 import plotly.express as px
@@ -21,21 +20,8 @@ from visualization import (
     create_sankey_diagram
 )
 
-# Import database modules
-import db_models
-import db_utils
-from sqlalchemy.orm import Session
-from contextlib import contextmanager
-
-# Database session context manager
-@contextmanager
-def get_db():
-    """Get a database session and handle closing it safely"""
-    session = db_models.SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+# Import simple database module
+import db_simple as db
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -79,11 +65,10 @@ with database_tab:
     st.header("Database Explorer")
     
     # Get data from database
-    with get_db() as db:
-        analysis_count = db_utils.get_analysis_count(db)
-        relationship_count = db_utils.get_relationship_count(db)
-        recent_analyses = db_utils.get_recent_analyses(db, limit=10)
-        top_entities = db_utils.get_top_entities(db, limit=20)
+    analysis_count = db.get_analysis_count()
+    relationship_count = db.get_relationship_count()
+    top_entities_df = db.get_top_entities(limit=20)
+    recent_analyses_df = db.get_recent_analyses(limit=10)
     
     # Display database statistics
     st.subheader("Database Overview")
@@ -92,202 +77,169 @@ with database_tab:
     col2.metric("Total Relationships", relationship_count)
     
     # Display top entities
-    if top_entities:
+    if not top_entities_df.empty:
         st.subheader("Top Entities")
         
-        # Create DataFrame
-        entity_df = pd.DataFrame([
-            {"Entity": entity.name, "Occurrences": entity.count}
-            for entity in top_entities
-        ])
-        
-        # Display bar chart
+        # Create bar chart
         entity_chart = px.bar(
-            entity_df, 
-            x="Entity", 
-            y="Occurrences",
+            top_entities_df, 
+            x="name", 
+            y="count",
             title="Most Common Entities in Knowledge Base",
-            color="Occurrences",
+            color="count",
             color_continuous_scale="Viridis"
         )
         entity_chart.update_layout(xaxis={'categoryorder':'total descending'})
         st.plotly_chart(entity_chart, use_container_width=True)
     
     # Recent analyses
-    if recent_analyses:
+    if not recent_analyses_df.empty:
         st.subheader("Recent Analyses")
-        
-        # Create dataframe
-        analyses_df = pd.DataFrame([
-            {
-                "ID": analysis.id,
-                "Title": analysis.title or "Untitled",
-                "Date": analysis.timestamp.strftime("%Y-%m-%d %H:%M"),
-                "Text Length": len(analysis.text) if analysis.text else 0
-            }
-            for analysis in recent_analyses
-        ])
         
         # Display table
         st.dataframe(
-            analyses_df,
-            use_container_width=True,
-            column_config={
-                "ID": st.column_config.NumberColumn("ID", help="Analysis ID"),
-                "Title": st.column_config.TextColumn("Title", help="Analysis title"),
-                "Date": st.column_config.TextColumn("Date", help="Analysis date and time"),
-                "Text Length": st.column_config.NumberColumn("Text Length", help="Length of analyzed text in characters")
-            }
+            recent_analyses_df.assign(
+                text_length=recent_analyses_df['text'].str.len()
+            ).rename(
+                columns={
+                    'id': 'ID',
+                    'title': 'Title',
+                    'timestamp': 'Date',
+                    'text_length': 'Text Length'
+                }
+            ),
+            use_container_width=True
         )
         
         # Selected analysis details
         selected_analysis_id = st.selectbox(
             "Select an analysis to view details",
-            options=[analysis.id for analysis in recent_analyses],
-            format_func=lambda x: f"#{x}: {next((a.title or 'Untitled' for a in recent_analyses if a.id == x), '')}"
+            options=recent_analyses_df['id'].tolist(),
+            format_func=lambda x: f"#{x}: {recent_analyses_df.loc[recent_analyses_df['id']==x, 'title'].iloc[0] if not pd.isna(recent_analyses_df.loc[recent_analyses_df['id']==x, 'title'].iloc[0]) else 'Untitled'}"
         )
         
         if selected_analysis_id:
-            with get_db() as db:
-                # Get analysis and its relationships
-                analysis = db_utils.get_analysis_by_id(db, selected_analysis_id)
-                relationships = db_utils.get_relationships_by_analysis_id(db, selected_analysis_id)
+            # Get analysis and its relationships
+            analysis = db.get_analysis_by_id(selected_analysis_id)
+            relationships_df = db.get_relationships_by_analysis_id(selected_analysis_id)
+            
+            if analysis:
+                # Display analysis details
+                st.subheader(f"Analysis #{analysis['id']}: {analysis['title'] or 'Untitled'}")
+                st.caption(f"Created on {analysis['timestamp']}")
                 
-                if analysis:
-                    # Display analysis details
-                    st.subheader(f"Analysis #{analysis.id}: {analysis.title or 'Untitled'}")
-                    st.caption(f"Created on {analysis.timestamp.strftime('%Y-%m-%d %H:%M')}")
+                # Display text in expander
+                with st.expander("View Text"):
+                    st.text_area("Analyzed Text", analysis['text'], height=150, disabled=True)
+                
+                if not relationships_df.empty:
+                    # Display relationships
+                    st.subheader("Extracted Relationships")
+                    st.dataframe(
+                        relationships_df,
+                        use_container_width=True,
+                        column_config={
+                            "confidence": st.column_config.ProgressColumn(
+                                "Confidence",
+                                help="Confidence score of the extracted relationship",
+                                format="%.2f",
+                                min_value=0,
+                                max_value=1,
+                            )
+                        }
+                    )
                     
-                    # Display text in expander
-                    with st.expander("View Text"):
-                        st.text_area("Analyzed Text", analysis.text, height=150, disabled=True)
+                    # Create and display graph visualization
+                    st.subheader("Relationship Graph")
                     
-                    if relationships:
-                        # Create DataFrame for relationships
-                        rel_df = pd.DataFrame([
-                            {
-                                "Subject": rel.subject,
-                                "Predicate": rel.predicate,
-                                "Object": rel.object,
-                                "Confidence": rel.confidence,
-                                "Polarity": rel.polarity,
-                                "Directness": rel.directness
-                            }
-                            for rel in relationships
-                        ])
-                        
-                        # Display relationships
-                        st.subheader("Extracted Relationships")
-                        st.dataframe(
-                            rel_df,
-                            use_container_width=True,
-                            column_config={
-                                "Confidence": st.column_config.ProgressColumn(
-                                    "Confidence",
-                                    help="Confidence score of the extracted relationship",
-                                    format="%.2f",
-                                    min_value=0,
-                                    max_value=1,
-                                )
-                            }
-                        )
-                        
-                        # Create and display graph visualization
-                        st.subheader("Relationship Graph")
-                        
-                        # Convert relationships to format needed for graph
-                        rel_dicts = []
-                        for rel in relationships:
-                            rel_dict = {
-                                "subject": rel.subject,
-                                "predicate": rel.predicate,
-                                "object": rel.object,
-                                "confidence": rel.confidence,
-                                "polarity": rel.polarity,
-                                "directness": rel.directness,
-                                "sentence": rel.sentence
-                            }
-                            rel_dicts.append(rel_dict)
-                        
-                        # Build graph
-                        graph = graph_utils.build_networkx_graph(rel_dicts)
-                        communities = graph_utils.get_community_structure(graph)
-                        
-                        # Create visualization
-                        fig = create_relationship_graph_figure(
-                            graph,
-                            community_map=communities,
-                            title=f"Relationship Graph for Analysis #{analysis.id}"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Option to delete the analysis
-                        if st.button("Delete Analysis", use_container_width=True, type="primary"):
-                            with get_db() as db:
-                                if db_utils.delete_analysis(db, int(analysis.id)):
-                                    st.success(f"Analysis #{analysis.id} deleted successfully")
-                                    st.rerun()
-                                else:
-                                    st.error("Failed to delete analysis")
-                    else:
-                        st.info("No relationships found for this analysis.")
+                    # Convert relationships to format needed for graph
+                    rel_dicts = []
+                    for _, row in relationships_df.iterrows():
+                        rel_dict = {
+                            "subject": row['subject'],
+                            "predicate": row['predicate'],
+                            "object": row['object'],
+                            "confidence": row['confidence'],
+                            "polarity": row['polarity'],
+                            "directness": row['directness'],
+                            "sentence": row['sentence']
+                        }
+                        rel_dicts.append(rel_dict)
+                    
+                    # Build graph
+                    graph = graph_utils.build_networkx_graph(rel_dicts)
+                    communities = graph_utils.get_community_structure(graph)
+                    
+                    # Create visualization
+                    fig = create_relationship_graph_figure(
+                        graph,
+                        community_map=communities,
+                        title=f"Relationship Graph for Analysis #{analysis['id']}"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Option to delete the analysis
+                    if st.button("Delete Analysis", use_container_width=True, type="primary"):
+                        if db.delete_analysis(int(analysis['id'])):
+                            st.success(f"Analysis #{analysis['id']} deleted successfully")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete analysis")
+                else:
+                    st.info("No relationships found for this analysis.")
     else:
         st.info("No analyses found in the database. Process some text and save it to get started.")
 
 # Sidebar configuration
 st.sidebar.header("Input Options")
 
-# Get database statistics
-with get_db() as db:
-    analysis_count = db_utils.get_analysis_count(db)
-    relationship_count = db_utils.get_relationship_count(db)
-
 # Database stats in sidebar
 st.sidebar.caption(f"Database: {analysis_count} analyses, {relationship_count} relationships")
 
 # Database options in expander
 with st.sidebar.expander("Saved Analyses"):
-    with get_db() as db:
-        recent_analyses = db_utils.get_recent_analyses(db, limit=5)
+    recent_analyses_df = db.get_recent_analyses(limit=5)
+    
+    if not recent_analyses_df.empty:
+        selected_analysis = st.selectbox(
+            "Load saved analysis",
+            options=[f"#{row['id']}: {row['title'] or 'Untitled'} ({row['timestamp']})" 
+                    for _, row in recent_analyses_df.iterrows()],
+            index=None,
+            placeholder="Select an analysis..."
+        )
         
-        if recent_analyses:
-            selected_analysis = st.selectbox(
-                "Load saved analysis",
-                options=[f"#{a.id}: {a.title or 'Untitled'} ({a.timestamp.strftime('%Y-%m-%d')})" for a in recent_analyses],
-                index=None,
-                placeholder="Select an analysis..."
-            )
+        if selected_analysis:
+            # Extract analysis ID from selection
+            analysis_id = int(selected_analysis.split(":")[0][1:])
             
-            if selected_analysis:
-                # Extract analysis ID from selection
-                analysis_id = int(selected_analysis.split(":")[0][1:])
+            # Load button
+            if st.button("Load Selected Analysis", use_container_width=True):
+                # Get analysis and relationships
+                analysis = db.get_analysis_by_id(analysis_id)
+                relationships_df = db.get_relationships_by_analysis_id(analysis_id)
                 
-                # Load button
-                if st.button("Load Selected Analysis", use_container_width=True):
-                    with get_db() as db:
-                        analysis = db_utils.get_analysis_by_id(db, analysis_id)
-                        if analysis:
-                            st.session_state.current_text = analysis.text
-                            relationships = db_utils.get_relationships_by_analysis_id(db, analysis_id)
-                            
-                            # Convert to the format expected by the app
-                            rel_dicts = []
-                            for rel in relationships:
-                                rel_dict = {
-                                    "subject": rel.subject,
-                                    "predicate": rel.predicate,
-                                    "object": rel.object,
-                                    "confidence": rel.confidence,
-                                    "polarity": rel.polarity,
-                                    "directness": rel.directness,
-                                    "sentence": rel.sentence
-                                }
-                                rel_dicts.append(rel_dict)
-                            
-                            # Process loaded data
-                            st.rerun()
-        else:
-            st.caption("No saved analyses found")
+                if analysis:
+                    st.session_state.current_text = analysis['text']
+                    
+                    # Convert to the format expected by the app
+                    rel_dicts = []
+                    for _, row in relationships_df.iterrows():
+                        rel_dict = {
+                            "subject": row['subject'],
+                            "predicate": row['predicate'],
+                            "object": row['object'],
+                            "confidence": row['confidence'],
+                            "polarity": row['polarity'],
+                            "directness": row['directness'],
+                            "sentence": row['sentence']
+                        }
+                        rel_dicts.append(rel_dict)
+                    
+                    # Rerun to update the UI
+                    st.rerun()
+    else:
+        st.caption("No saved analyses found")
 
 # Input method selection
 input_method = st.sidebar.radio(
@@ -404,24 +356,22 @@ with main_tab:
     # Handle save button click
     if save_button and st.session_state.processed_data:
         with st.spinner("Saving analysis to database..."):
-            with get_db() as db:
-                # Save analysis with title if provided
-                title = analysis_title if analysis_title else None
-                analysis = db_utils.save_analysis(
-                    db=db,
-                    text=st.session_state.current_text,
-                    relationships=st.session_state.processed_data.get("filtered_relationships", []),
-                    title=title
-                )
-                
-                # Show success message
-                st.success(f"Analysis saved to database with ID: {analysis.id}")
-                
-                # Reset title field
-                analysis_title = ""
-                
-                # Force rerun to update database stats
-                st.rerun()
+            # Save analysis with title if provided
+            title = analysis_title if analysis_title else None
+            analysis_id = db.save_analysis(
+                text=st.session_state.current_text,
+                relationships=st.session_state.processed_data.get("filtered_relationships", []),
+                title=title
+            )
+            
+            # Show success message
+            st.success(f"Analysis saved to database with ID: {analysis_id}")
+            
+            # Reset title field
+            analysis_title = ""
+            
+            # Force rerun to update database stats
+            st.rerun()
 
     # Handle process button click
     if process_button and text_for_analysis:
@@ -532,6 +482,9 @@ with main_tab:
                 st.plotly_chart(fig, use_container_width=True)
                 
             elif visualization_type == "Graph (Force Layout)":
+                # Import networkx since we need it directly here
+                import networkx as nx
+                
                 # Use force layout
                 pos = nx.spring_layout(graph, seed=42)
                 nx.set_node_attributes(graph, {node: position for node, position in pos.items()}, 'pos')
