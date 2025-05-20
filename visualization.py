@@ -208,8 +208,7 @@ def create_relationship_graph_figure(G: nx.DiGraph,
     fig = go.Figure(
         data=edge_traces + [node_trace],
         layout=go.Layout(
-            title=dict(text=title, x=0.5, xanchor='center'),
-            titlefont=dict(size=16),
+            title=dict(text=title, x=0.5, xanchor='center', font=dict(size=16)),
             showlegend=True,
             legend=dict(title="Predicates & Entities"),
             hovermode='closest',
