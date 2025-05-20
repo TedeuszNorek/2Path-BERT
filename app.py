@@ -21,6 +21,22 @@ from visualization import (
     create_sankey_diagram
 )
 
+# Import database modules
+import db_models
+import db_utils
+from sqlalchemy.orm import Session
+from contextlib import contextmanager
+
+# Database session context manager
+@contextmanager
+def get_db():
+    """Get a database session and handle closing it safely"""
+    session = db_models.SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
 
