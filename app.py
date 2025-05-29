@@ -321,8 +321,8 @@ st.sidebar.header("🔬 Scientific Research Setup")
 # GNN Model Selection
 gnn_model = st.sidebar.selectbox(
     "GNN Architecture",
-    ["RGCN", "CompGCN", "RGAT"],
-    help="Select Graph Neural Network architecture for comparison"
+    ["None", "RGCN", "CompGCN", "RGAT"],
+    help="Select Graph Neural Network architecture for comparison (None = BERT only)"
 )
 
 # Temperature Control
@@ -368,10 +368,16 @@ min_confidence = st.sidebar.slider(
 
 # Advanced options in expander
 with st.sidebar.expander("Advanced Options"):
-    visualization_type = st.selectbox(
-        "Visualization type",
-        ["Graph (RGCN Layout)", "Graph (Force Layout)", "Adjacency Matrix", "Sankey Diagram"]
-    )
+    if gnn_model == "None":
+        visualization_type = st.selectbox(
+            "Visualization type",
+            ["Graph (Force Layout)", "Adjacency Matrix", "Sankey Diagram"]
+        )
+    else:
+        visualization_type = st.selectbox(
+            "Visualization type",
+            ["Graph (GNN Layout)", "Graph (Force Layout)", "Adjacency Matrix", "Sankey Diagram"]
+        )
     
     show_negative = st.checkbox("Show negative relationships", value=True)
     show_indirect = st.checkbox("Show indirect relationships", value=True)
@@ -421,14 +427,19 @@ with main_tab:
         if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
             st.session_state.bert_processor = BERTProcessor(temperature=temperature)
         
-        if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
-            st.session_state.gnn_processor = GNNProcessor(
-                model_type=gnn_model.lower(),
-                temperature=temperature
-            )
+        # Only initialize GNN processor if not "None"
+        if gnn_model != "None":
+            if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
+                st.session_state.gnn_processor = GNNProcessor(
+                    model_type=gnn_model.lower(),
+                    temperature=temperature
+                )
+        else:
+            st.session_state.gnn_processor = None
         
         # Create processing container
-        with st.spinner(f"Processing text with BERT + {gnn_model}..."):
+        pipeline_description = "BERT only" if gnn_model == "None" else f"BERT + {gnn_model}"
+        with st.spinner(f"Processing text with {pipeline_description}..."):
             # Clear previous results
             st.session_state.processed_data = None
             st.session_state.graph = None
@@ -470,20 +481,39 @@ with main_tab:
                 graph = graph_utils.build_networkx_graph(filtered_relationships)
                 graph_time = time.time() - start_time
                 
-                # Step 3: Process with selected GNN
-                start_time = time.time()
-                gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
-                gnn_time = time.time() - start_time
+                # Step 3: Process with selected GNN (skip if None)
+                gnn_time = 0.0
+                gnn_result = None
                 
-                # Step 4: Apply GNN layout to graph
-                if len(gnn_result["embeddings"]) > 0:
-                    graph_with_layout = graph_utils.apply_rgcn_layout(
-                        graph,
-                        gnn_result["embeddings"],
-                        gnn_result["entity_to_idx"]
-                    )
+                if gnn_model != "None" and st.session_state.gnn_processor is not None:
+                    start_time = time.time()
+                    gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
+                    gnn_time = time.time() - start_time
+                    
+                    # Step 4: Apply GNN layout to graph
+                    if len(gnn_result["embeddings"]) > 0:
+                        graph_with_layout = graph_utils.apply_rgcn_layout(
+                            graph,
+                            gnn_result["embeddings"],
+                            gnn_result["entity_to_idx"]
+                        )
+                    else:
+                        graph_with_layout = graph
                 else:
+                    # BERT-only pipeline: use simple spring layout
+                    import networkx as nx
+                    pos = nx.spring_layout(graph, seed=42)
+                    nx.set_node_attributes(graph, {node: position for node, position in pos.items()}, 'pos')
                     graph_with_layout = graph
+                    
+                    # Create empty GNN result for BERT-only
+                    gnn_result = {
+                        "embeddings": [],
+                        "entity_to_idx": {},
+                        "relation_to_idx": {},
+                        "processing_time": 0.0,
+                        "model_type": "none"
+                    }
                 
                 # Store results in session state
                 st.session_state.processed_data = processed_data
@@ -491,18 +521,24 @@ with main_tab:
                 st.session_state.rgcn_result = gnn_result
                 
                 # Show timing info and performance metrics
-                col1, col2, col3 = st.columns(3)
-                col1.metric("BERT Time", f"{bert_time:.3f}s")
-                col2.metric("Graph Time", f"{graph_time:.3f}s") 
-                col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")
+                if gnn_model == "None":
+                    col1, col2 = st.columns(2)
+                    col1.metric("BERT Time", f"{bert_time:.3f}s")
+                    col2.metric("Graph Time", f"{graph_time:.3f}s")
+                else:
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("BERT Time", f"{bert_time:.3f}s")
+                    col2.metric("Graph Time", f"{graph_time:.3f}s") 
+                    col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")
                 
                 # Performance comparison info
+                total_time = bert_time + graph_time + gnn_time
                 st.info(f"""
                 **Scientific Measurement Results:**
-                - Model: BERT + {gnn_model}
+                - Pipeline: {pipeline_description}
                 - Temperature: {temperature}
                 - Relationships extracted: {len(filtered_relationships)}
-                - Total processing time: {bert_time + graph_time + gnn_time:.3f}s
+                - Total processing time: {total_time:.3f}s
                 """)
                 
             except Exception as e:
@@ -614,17 +650,24 @@ with main_tab:
             gnn_metrics = st.session_state.gnn_processor.get_performance_metrics() if st.session_state.gnn_processor else {}
             
             # Performance comparison table
-            metrics_df = pd.DataFrame({
-                "Component": ["BERT", gnn_model],
-                "Processing Time": [
-                    f"{bert_metrics.get('processing_time', 0):.4f}s",
-                    f"{gnn_metrics.get('processing_time', 0):.4f}s"
-                ],
-                "Temperature": [
-                    f"{bert_metrics.get('temperature', temperature):.2f}",
-                    f"{gnn_metrics.get('temperature', temperature):.2f}"
-                ]
-            })
+            if gnn_model == "None":
+                metrics_df = pd.DataFrame({
+                    "Component": ["BERT"],
+                    "Processing Time": [f"{bert_metrics.get('processing_time', 0):.4f}s"],
+                    "Temperature": [f"{bert_metrics.get('temperature', temperature):.2f}"]
+                })
+            else:
+                metrics_df = pd.DataFrame({
+                    "Component": ["BERT", gnn_model],
+                    "Processing Time": [
+                        f"{bert_metrics.get('processing_time', 0):.4f}s",
+                        f"{gnn_metrics.get('processing_time', 0):.4f}s"
+                    ],
+                    "Temperature": [
+                        f"{bert_metrics.get('temperature', temperature):.2f}",
+                        f"{gnn_metrics.get('temperature', temperature):.2f}"
+                    ]
+                })
             
             st.dataframe(metrics_df, use_container_width=True)
             
