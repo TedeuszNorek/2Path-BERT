@@ -10,8 +10,8 @@ import textwrap
 from io import StringIO
 
 # Import our custom modules
-from bart_processor import BARTProcessor
-from rgcn_model import RGCNProcessor
+from bert_processor import BERTProcessor
+from gnn_models import GNNProcessor
 import graph_utils
 from visualization import (
     create_relationship_graph_figure,
@@ -44,11 +44,11 @@ if 'graph' not in st.session_state:
 if 'rgcn_result' not in st.session_state:
     st.session_state.rgcn_result = None
 
-# Create processors as singletons in session state
-if 'bart_processor' not in st.session_state:
-    st.session_state.bart_processor = BARTProcessor()
-if 'rgcn_processor' not in st.session_state:
-    st.session_state.rgcn_processor = RGCNProcessor()
+# Initialize processors with default values
+if 'bert_processor' not in st.session_state:
+    st.session_state.bert_processor = None
+if 'gnn_processor' not in st.session_state:
+    st.session_state.gnn_processor = None
 
 # App header
 st.title("🔍 Semantic Relationship Analyzer")
@@ -315,6 +315,45 @@ elif input_method == "Sample Text":
     text_for_analysis = sample_texts[sample_choice]
     st.sidebar.text_area("Sample Text Preview", text_for_analysis, height=150, disabled=True)
 
+# Scientific Research Configuration
+st.sidebar.header("🔬 Scientific Research Setup")
+
+# GNN Model Selection
+gnn_model = st.sidebar.selectbox(
+    "GNN Architecture",
+    ["RGCN", "CompGCN", "RGAT"],
+    help="Select Graph Neural Network architecture for comparison"
+)
+
+# Temperature Control
+temperature = st.sidebar.slider(
+    "Temperature",
+    min_value=0.1,
+    max_value=3.0,
+    value=1.0,
+    step=0.1,
+    help="Temperature parameter for model calibration (lower = more confident)"
+)
+
+# Custom Prompt Input
+custom_prompt = st.sidebar.text_area(
+    "Custom Analysis Prompt",
+    placeholder="Enter specific instructions for relationship extraction...",
+    height=100,
+    help="Custom prompt to guide the analysis focus"
+)
+
+# Clear cache button for clean measurements
+if st.sidebar.button("🧹 Clear Cache", help="Clear all cached data for clean measurement"):
+    st.session_state.bert_processor = None
+    st.session_state.gnn_processor = None
+    st.session_state.processed_data = None
+    st.session_state.graph = None
+    st.session_state.rgcn_result = None
+    st.sidebar.success("Cache cleared!")
+
+st.sidebar.divider()
+
 # Processing options
 st.sidebar.header("Processing Options")
 
@@ -378,18 +417,31 @@ with main_tab:
         # Store the current text in session state
         st.session_state.current_text = text_for_analysis
         
+        # Initialize processors with current settings
+        if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
+            st.session_state.bert_processor = BERTProcessor(temperature=temperature)
+        
+        if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
+            st.session_state.gnn_processor = GNNProcessor(
+                model_type=gnn_model.lower(),
+                temperature=temperature
+            )
+        
         # Create processing container
-        with st.spinner("Processing text..."):
+        with st.spinner(f"Processing text with BERT + {gnn_model}..."):
             # Clear previous results
             st.session_state.processed_data = None
             st.session_state.graph = None
             st.session_state.rgcn_result = None
             
             try:
-                # Step 1: Process text with BART
+                # Step 1: Process text with BERT
                 start_time = time.time()
-                processed_data = st.session_state.bart_processor.extract_relationships(text_for_analysis)
-                bart_time = time.time() - start_time
+                processed_data = st.session_state.bert_processor.extract_relationships(
+                    text_for_analysis, 
+                    custom_prompt=custom_prompt
+                )
+                bert_time = time.time() - start_time
                 
                 # Filter relationships by confidence
                 filtered_relationships = [
@@ -418,28 +470,44 @@ with main_tab:
                 graph = graph_utils.build_networkx_graph(filtered_relationships)
                 graph_time = time.time() - start_time
                 
-                # Step 3: Process with RGCN
+                # Step 3: Process with selected GNN
                 start_time = time.time()
-                rgcn_result = st.session_state.rgcn_processor.process_relationships(filtered_relationships)
-                rgcn_time = time.time() - start_time
+                gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
+                gnn_time = time.time() - start_time
                 
-                # Step 4: Apply RGCN layout to graph
-                graph_with_layout = graph_utils.apply_rgcn_layout(
-                    graph,
-                    rgcn_result["embeddings"],
-                    rgcn_result["entity_to_idx"]
-                )
+                # Step 4: Apply GNN layout to graph
+                if len(gnn_result["embeddings"]) > 0:
+                    graph_with_layout = graph_utils.apply_rgcn_layout(
+                        graph,
+                        gnn_result["embeddings"],
+                        gnn_result["entity_to_idx"]
+                    )
+                else:
+                    graph_with_layout = graph
                 
                 # Store results in session state
                 st.session_state.processed_data = processed_data
                 st.session_state.graph = graph_with_layout
-                st.session_state.rgcn_result = rgcn_result
+                st.session_state.rgcn_result = gnn_result
                 
-                # Show timing info
-                st.info(f"Processing completed: BART: {bart_time:.2f}s, Graph: {graph_time:.2f}s, RGCN: {rgcn_time:.2f}s")
+                # Show timing info and performance metrics
+                col1, col2, col3 = st.columns(3)
+                col1.metric("BERT Time", f"{bert_time:.3f}s")
+                col2.metric("Graph Time", f"{graph_time:.3f}s") 
+                col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")
+                
+                # Performance comparison info
+                st.info(f"""
+                **Scientific Measurement Results:**
+                - Model: BERT + {gnn_model}
+                - Temperature: {temperature}
+                - Relationships extracted: {len(filtered_relationships)}
+                - Total processing time: {bert_time + graph_time + gnn_time:.3f}s
+                """)
                 
             except Exception as e:
                 st.error(f"Error processing text: {str(e)}")
+                st.error("Please check if spaCy English model is installed: `python -m spacy download en_core_web_sm`")
 
     # Display results if available
     if st.session_state.processed_data and st.session_state.graph:
@@ -470,14 +538,15 @@ with main_tab:
             communities = graph_utils.get_community_structure(graph)
             
             # Visualize based on selected type
-            if visualization_type == "Graph (RGCN Layout)":
-                # Create figure using RGCN layout
+            if visualization_type == "Graph (RGCN Layout)" or visualization_type == "Graph (GNN Layout)":
+                # Create figure using GNN layout
+                gnn_model_name = st.session_state.rgcn_result.get("model_type", "GNN") if st.session_state.rgcn_result else "GNN"
                 fig = create_relationship_graph_figure(
                     graph,
                     community_map=communities,
                     highlight_nodes=highlight_nodes,
                     highlight_edges=highlight_edges,
-                    title="Semantic Relationship Graph (RGCN Layout)"
+                    title=f"Semantic Relationship Graph ({gnn_model_name.upper()} Layout)"
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
@@ -537,6 +606,28 @@ with main_tab:
             # Show statistics
             st.header("Statistics")
             
+            # Scientific Performance Metrics
+            st.subheader("📊 Performance Metrics")
+            
+            # Model information
+            bert_metrics = st.session_state.bert_processor.get_performance_metrics() if st.session_state.bert_processor else {}
+            gnn_metrics = st.session_state.gnn_processor.get_performance_metrics() if st.session_state.gnn_processor else {}
+            
+            # Performance comparison table
+            metrics_df = pd.DataFrame({
+                "Component": ["BERT", gnn_model],
+                "Processing Time": [
+                    f"{bert_metrics.get('processing_time', 0):.4f}s",
+                    f"{gnn_metrics.get('processing_time', 0):.4f}s"
+                ],
+                "Temperature": [
+                    f"{bert_metrics.get('temperature', temperature):.2f}",
+                    f"{gnn_metrics.get('temperature', temperature):.2f}"
+                ]
+            })
+            
+            st.dataframe(metrics_df, use_container_width=True)
+            
             # Graph statistics
             graph_stats = graph_utils.get_graph_statistics(graph)
             
@@ -547,6 +638,11 @@ with main_tab:
             
             metrics_col1.metric("Avg. Connections", f"{graph_stats['avg_degree']:.2f}")
             metrics_col2.metric("Graph Density", f"{graph_stats['density']:.3f}")
+            
+            # Scientific comparison data
+            if processed_data.get("custom_prompt"):
+                st.subheader("Analysis Configuration")
+                st.text_area("Custom Prompt Used", processed_data["custom_prompt"], disabled=True, height=60)
             
             # Polarity and directness distributions
             if "statistics" in processed_data:
