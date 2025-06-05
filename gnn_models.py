@@ -327,7 +327,7 @@ class GNNProcessor:
         # Forward pass through the model
         with torch.no_grad():
             if self.model is not None:
-                embeddings = self.model(node_features, adjacency_matrices)
+                embeddings = self._forward_pass(node_features, adjacency_matrices)
             else:
                 embeddings = torch.zeros(num_entities, self.output_dim)
         
@@ -465,6 +465,22 @@ class GNNProcessor:
                 adjacency_matrices[rel_idx][subj_idx, obj_idx] = scaled_confidence
         
         return adjacency_matrices
+    
+    def _forward_pass(self, node_features: torch.Tensor, adjacency_matrices: List[torch.Tensor]) -> torch.Tensor:
+        """Perform forward pass through the GNN layers"""
+        x = node_features
+        
+        if self.model_type == 'rgcn':
+            for layer in self.model:
+                x = layer(x, adjacency_matrices)
+        elif self.model_type == 'compgcn':
+            for layer in self.model:
+                x = layer(x, adjacency_matrices)
+        elif self.model_type == 'rgat':
+            for layer in self.model:
+                x = layer(x, adjacency_matrices)
+        
+        return x
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Get performance metrics for comparison"""

@@ -390,6 +390,53 @@ gnn_model = st.sidebar.selectbox(
     help="Select Graph Neural Network architecture for comparison (None = BERT only)"
 )
 
+# Add detailed explanations for each GNN option
+with st.sidebar.expander("🔍 GNN Architecture Explanations"):
+    if gnn_model == "None":
+        st.markdown("""
+        **BERT Only (Baseline)**
+        - Pure BERT-based relationship extraction without graph neural networks
+        - Uses spaCy's transformer models for dependency parsing and NER
+        - Provides clean baseline for comparing GNN enhancements
+        
+        **Why chosen:** Essential control group for scientific measurement
+        
+        **Research focus:** Establishes baseline performance for semantic extraction
+        """)
+    elif gnn_model == "RGCN":
+        st.markdown("""
+        **Relational Graph Convolutional Network (RGCN)**
+        - Extends GCN to handle multiple relation types in knowledge graphs
+        - Uses relation-specific weight matrices for different edge types
+        - Excellent for heterogeneous graphs with diverse relationship types
+        
+        **Why chosen:** Handles semantic relationships with different polarities/directness
+        
+        **Research focus:** How relation-aware convolutions improve relationship understanding
+        """)
+    elif gnn_model == "CompGCN":
+        st.markdown("""
+        **Composition-based Graph Convolutional Network (CompGCN)**
+        - Jointly embeds both entities and relations in the same space
+        - Uses composition functions (multiplication, subtraction, circular correlation)
+        - Learns rich representations by combining entity and relation embeddings
+        
+        **Why chosen:** Captures complex entity-relation interactions in semantic graphs
+        
+        **Research focus:** How joint embedding affects semantic relationship quality
+        """)
+    elif gnn_model == "RGAT":
+        st.markdown("""
+        **Relational Graph Attention Network (RGAT)**
+        - Combines attention mechanisms with relational graph processing
+        - Learns importance weights for different neighbors and relation types
+        - Provides interpretable attention scores for relationship importance
+        
+        **Why chosen:** Attention can highlight most relevant semantic connections
+        
+        **Research focus:** How attention improves focus on key relationships
+        """)
+
 # Temperature Control
 temperature = st.sidebar.slider(
     "Temperature",
