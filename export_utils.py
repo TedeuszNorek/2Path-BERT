@@ -4,7 +4,7 @@ import datetime
 from typing import List, Dict, Any, Optional
 import db_simple as db
 
-def create_export_data(include_full_history: bool = False, selected_analysis_ids: List[int] = None) -> pd.DataFrame:
+def create_export_data(include_full_history: bool = False, selected_analysis_ids: Optional[List[int]] = None) -> pd.DataFrame:
     """
     Create export data based on the specified CSV structure
     
@@ -28,46 +28,60 @@ def create_export_data(include_full_history: bool = False, selected_analysis_ids
     if include_full_history:
         # Get all analyses from database
         analyses_df = db.get_recent_analyses(limit=1000)  # Get more analyses for full history
-    elif selected_analysis_ids:
+    elif selected_analysis_ids and len(selected_analysis_ids) > 0:
         # Get specific analyses
-        analyses_df = pd.DataFrame()
+        analyses_list = []
         for analysis_id in selected_analysis_ids:
             analysis = db.get_analysis_by_id(analysis_id)
             if analysis:
-                analyses_df = pd.concat([analyses_df, pd.DataFrame([analysis])], ignore_index=True)
+                analyses_list.append(analysis)
+        
+        if analyses_list:
+            analyses_df = pd.DataFrame(analyses_list)
+        else:
+            analyses_df = pd.DataFrame()
     else:
         # Return empty DataFrame
         return pd.DataFrame(columns=columns)
     
+    if analyses_df.empty:
+        return pd.DataFrame(columns=columns)
+    
     for _, analysis in analyses_df.iterrows():
-        analysis_id = analysis['id']
+        analysis_id = int(analysis['id'])
         
         # Get relationships for this analysis
         relationships_df = db.get_relationships_by_analysis_id(analysis_id)
         
-        # Determine model configuration based on relationships data
-        model_config = "Plain"  # Default
-        if not relationships_df.empty:
-            # Check if this was processed with GNN (look for processing method indicators)
-            # This is a simplified heuristic - in practice you'd store this info
-            if len(relationships_df) > 5:  # Assume GNN if many relationships found
-                model_config = "BERT+GNN"
-            else:
-                model_config = "BERT"
+        # Get model configuration from database if available
+        gnn_arch = analysis.get('gnn_architecture', 'none')
+        if gnn_arch and gnn_arch != 'none':
+            model_config = f"BERT+{gnn_arch.upper()}"
+        else:
+            model_config = "BERT"
+        
+        # Get temperature from database if available
+        temperature = analysis.get('temperature', 1.0)
+        custom_prompt = analysis.get('custom_prompt', '')
+        
+        # Safely get text content
+        text_content = analysis.get('text', '') or ''
+        if len(text_content) > 500:
+            text_content = text_content[:500] + "..."
         
         # Create export row
         row_data = {
             'Label': f"Analysis_{analysis_id}",
             'Type': "Semantic_Analysis",
             'Tags': "relationship_extraction",
-            'Description': analysis.get('title', f"Semantic analysis #{analysis_id}"),
+            'Description': analysis.get('title') or f"Semantic analysis #{analysis_id}",
             'Trial ID': analysis_id,
             'Model': "BERT",
             'Model Configuration': model_config,
             'Link': f"analysis_{analysis_id}",
-            'Analysis prompt': "",  # Would need to be stored in analysis metadata
-            'Text': analysis.get('text', '').replace('\n', ' ').replace('\r', ' ')[:500] + "..." if len(analysis.get('text', '')) > 500 else analysis.get('text', ''),
-            'Temperature': "1.0",  # Default - would need to be stored in analysis metadata
+            'Analysis prompt': custom_prompt,
+            'Text': text_content.replace('\n', ' ').replace('\r', ' '),
+            'Temperature': str(temperature),
             '[Engineer]': f"Relationships: {len(relationships_df)}"
         }
         
@@ -78,20 +92,23 @@ def create_export_data(include_full_history: bool = False, selected_analysis_ids
             rel_row = {
                 'Label': f"Relationship_{rel['id']}",
                 'Type': "Triple",
-                'Tags': f"{rel['polarity']},{rel['directness']}",
-                'Description': f"{rel['subject']} -> {rel['predicate']} -> {rel['object']}",
+                'Tags': f"{rel.get('polarity', '')},{rel.get('directness', '')}",
+                'Description': f"{rel.get('subject', '')} -> {rel.get('predicate', '')} -> {rel.get('object', '')}",
                 'Trial ID': analysis_id,
                 'Model': "BERT",
                 'Model Configuration': model_config,
                 'Link': f"analysis_{analysis_id}_rel_{rel['id']}",
                 'Analysis prompt': rel.get('sentence', ''),
-                'Text': f"Subject: {rel['subject']}, Predicate: {rel['predicate']}, Object: {rel['object']}",
-                'Temperature': "1.0",
-                '[Engineer]': f"Confidence: {rel['confidence']:.3f}"
+                'Text': f"Subject: {rel.get('subject', '')}, Predicate: {rel.get('predicate', '')}, Object: {rel.get('object', '')}",
+                'Temperature': str(temperature),
+                '[Engineer]': f"Confidence: {rel.get('confidence', 0):.3f}"
             }
             export_data.append(rel_row)
     
-    return pd.DataFrame(export_data, columns=columns)
+    if not export_data:
+        return pd.DataFrame(columns=columns)
+    
+    return pd.DataFrame(export_data)
 
 def export_to_csv(df: pd.DataFrame, filename: str = None) -> str:
     """

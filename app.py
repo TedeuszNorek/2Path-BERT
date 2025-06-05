@@ -468,10 +468,22 @@ with main_tab:
         with st.spinner("Saving analysis to database..."):
             # Save analysis with title if provided
             title = analysis_title if analysis_title else None
+            # Get processing times from session state if available
+            bert_time = getattr(st.session_state, 'last_bert_time', 0.0)
+            gnn_time = getattr(st.session_state, 'last_gnn_time', 0.0) 
+            graph_time = getattr(st.session_state, 'last_graph_time', 0.0)
+            
             analysis_id = db.save_analysis(
                 text=st.session_state.current_text,
                 relationships=st.session_state.processed_data.get("filtered_relationships", []),
-                title=title
+                title=title,
+                model_type='bert',
+                gnn_architecture=gnn_model.lower() if gnn_model != "None" else "none",
+                temperature=temperature,
+                custom_prompt=custom_prompt,
+                processing_time_bert=bert_time,
+                processing_time_gnn=gnn_time,
+                processing_time_graph=graph_time
             )
             
             # Show success message
@@ -584,6 +596,11 @@ with main_tab:
                 st.session_state.processed_data = processed_data
                 st.session_state.graph = graph_with_layout
                 st.session_state.rgcn_result = gnn_result
+                
+                # Store timing data for later use in save
+                st.session_state.last_bert_time = bert_time
+                st.session_state.last_gnn_time = gnn_time
+                st.session_state.last_graph_time = graph_time
                 
                 # Show timing info and performance metrics
                 if gnn_model == "None":
