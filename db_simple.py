@@ -18,7 +18,14 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         text TEXT,
         timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-        title TEXT
+        title TEXT,
+        model_type TEXT DEFAULT 'bert',
+        gnn_architecture TEXT DEFAULT 'none',
+        temperature REAL DEFAULT 1.0,
+        custom_prompt TEXT,
+        processing_time_bert REAL DEFAULT 0.0,
+        processing_time_gnn REAL DEFAULT 0.0,
+        processing_time_graph REAL DEFAULT 0.0
     )
     ''')
     
@@ -54,7 +61,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_analysis(text: str, relationships: List[Dict[str, Any]], title: Optional[str] = None) -> int:
+def save_analysis(text: str, relationships: List[Dict[str, Any]], title: Optional[str] = None, 
+                 model_type: str = 'bert', gnn_architecture: str = 'none', temperature: float = 1.0,
+                 custom_prompt: str = '', processing_time_bert: float = 0.0, 
+                 processing_time_gnn: float = 0.0, processing_time_graph: float = 0.0) -> int:
     """
     Save a text analysis and its relationships to the database
     
@@ -70,10 +80,13 @@ def save_analysis(text: str, relationships: List[Dict[str, Any]], title: Optiona
     cursor = conn.cursor()
     
     try:
-        # Insert analysis
+        # Insert analysis with scientific measurement data
         cursor.execute(
-            'INSERT INTO analyses (text, title) VALUES (?, ?)',
-            (text, title)
+            '''INSERT INTO analyses (text, title, model_type, gnn_architecture, temperature, 
+               custom_prompt, processing_time_bert, processing_time_gnn, processing_time_graph) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (text, title, model_type, gnn_architecture, temperature, custom_prompt,
+             processing_time_bert, processing_time_gnn, processing_time_graph)
         )
         analysis_id = cursor.lastrowid
         

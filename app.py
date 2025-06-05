@@ -22,6 +22,7 @@ from visualization import (
 
 # Import simple database module
 import db_simple as db
+from export_utils import create_export_data, export_to_csv, get_export_statistics
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -75,6 +76,70 @@ with database_tab:
     col1, col2 = st.columns(2)
     col1.metric("Total Analyses", analysis_count)
     col2.metric("Total Relationships", relationship_count)
+    
+    # Export functionality
+    st.subheader("📤 Export Data")
+    
+    export_col1, export_col2 = st.columns([2, 1])
+    
+    with export_col1:
+        export_full_history = st.checkbox(
+            "Export entire analysis history", 
+            value=False,
+            help="Check to export all analyses and relationships from the database"
+        )
+        
+        if export_full_history:
+            st.info("This will export all analyses and their relationships from the database")
+        else:
+            st.info("This will export only the analyses visible in the recent list below")
+    
+    with export_col2:
+        if st.button("📥 Generate Export", use_container_width=True):
+            with st.spinner("Generating export data..."):
+                try:
+                    # Create export data
+                    if export_full_history:
+                        export_df = create_export_data(include_full_history=True)
+                    else:
+                        # Export only recent analyses
+                        recent_ids = recent_analyses_df['id'].tolist() if not recent_analyses_df.empty else []
+                        export_df = create_export_data(selected_analysis_ids=recent_ids)
+                    
+                    if not export_df.empty:
+                        # Generate CSV content
+                        csv_content = export_to_csv(export_df)
+                        
+                        # Get export statistics
+                        stats = get_export_statistics(export_df)
+                        
+                        # Display export info
+                        st.success(f"Export generated successfully!")
+                        st.write(f"**Export Statistics:**")
+                        st.write(f"- Total rows: {stats['total_rows']}")
+                        st.write(f"- Analyses: {stats['analyses_count']}")
+                        st.write(f"- Relationships: {stats['relationships_count']}")
+                        
+                        # Download button
+                        st.download_button(
+                            label="💾 Download CSV Export",
+                            data=csv_content,
+                            file_name=f"semantic_analysis_export_{stats['export_date'][:10]}.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+                        
+                        # Preview first few rows
+                        with st.expander("Preview Export Data"):
+                            st.dataframe(export_df.head(10), use_container_width=True)
+                    
+                    else:
+                        st.warning("No data available for export")
+                        
+                except Exception as e:
+                    st.error(f"Error generating export: {str(e)}")
+    
+    st.divider()
     
     # Display top entities
     if not top_entities_df.empty:
