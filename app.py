@@ -1,941 +1,419 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import os
 import time
-from typing import Dict, List, Any, Tuple, Optional
-import plotly.graph_objects as go
-import plotly.express as px
-import textwrap
-from io import StringIO
+import pandas as pd
+import datetime
+import os
+import logging
+from typing import Dict, List, Any, Optional
 
-# Import our custom modules
+# Core research modules
 from bert_processor import BERTProcessor
 from gnn_models import GNNProcessor
 import graph_utils
-from visualization import (
-    create_relationship_graph_figure,
-    create_heatmap_figure,
-    create_bar_chart,
-    create_sankey_diagram
-)
-
-# Import simple database module
+import visualization
 import db_simple as db
-from export_utils import create_export_data, export_to_csv, get_export_statistics
 
-# Ensure logs directory exists
-os.makedirs("logs", exist_ok=True)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Set page configuration
+# Set page config
 st.set_page_config(
-    page_title="Semantic Relationship Analyzer",
-    page_icon="🔍",
+    page_title="BERT+GNN Research Platform",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # Initialize session state
-if 'current_text' not in st.session_state:
-    st.session_state.current_text = ""
-if 'processed_data' not in st.session_state:
-    st.session_state.processed_data = None
-if 'graph' not in st.session_state:
-    st.session_state.graph = None
-if 'rgcn_result' not in st.session_state:
-    st.session_state.rgcn_result = None
-
-# Initialize processors with default values
 if 'bert_processor' not in st.session_state:
     st.session_state.bert_processor = None
 if 'gnn_processor' not in st.session_state:
     st.session_state.gnn_processor = None
+if 'processed_data' not in st.session_state:
+    st.session_state.processed_data = None
+if 'graph' not in st.session_state:
+    st.session_state.graph = None
+if 'gnn_result' not in st.session_state:
+    st.session_state.gnn_result = None
+if 'current_text' not in st.session_state:
+    st.session_state.current_text = ""
+if 'experiment_id' not in st.session_state:
+    st.session_state.experiment_id = None
 
-# App header
-st.title("🔍 Semantic Relationship Analyzer")
-st.markdown("""
-This application extracts and visualizes semantic relationships from text using BART and RGCN models.
-Extract subject-predicate-object triples, analyze relationship patterns, and explore knowledge graphs.
-""")
+# Initialize database
+db.init_db()
 
-# Create tabs for main functionality and database explorer
-main_tab, database_tab = st.tabs(["Analyzer", "Database Explorer"])
+# Sidebar - Research Configuration
+st.sidebar.header("🔬 Research Configuration")
 
-# Database Explorer tab content
-with database_tab:
-    st.header("Database Explorer")
+# Model Selection
+base_model = st.sidebar.selectbox(
+    "Base Model",
+    ["BERT"],
+    help="Base language model for semantic extraction"
+)
+
+gnn_model = st.sidebar.selectbox(
+    "GNN Architecture",
+    ["None", "RGCN", "CompGCN", "RGAT"],
+    help="Graph Neural Network architecture for relationship processing"
+)
+
+# Research explanations
+with st.sidebar.expander("🔍 Model Explanations"):
+    if gnn_model == "None":
+        st.markdown("""
+        **BERT Only (Control Group)**
+        - Pure transformer-based semantic extraction
+        - Baseline for measuring GNN enhancement effects
+        - Uses dependency parsing and named entity recognition
+        """)
+    elif gnn_model == "RGCN":
+        st.markdown("""
+        **Relational Graph Convolutional Network**
+        - Relation-specific weight matrices for different edge types
+        - Handles heterogeneous relationship graphs effectively
+        - Best for diverse semantic relationship types
+        """)
+    elif gnn_model == "CompGCN":
+        st.markdown("""
+        **Composition-based Graph Convolutional Network**
+        - Joint entity-relation embedding in unified space
+        - Composition functions for entity-relation interactions
+        - Captures complex semantic dependencies
+        """)
+    elif gnn_model == "RGAT":
+        st.markdown("""
+        **Relational Graph Attention Network**
+        - Attention mechanisms for relationship importance
+        - Interpretable attention weights for analysis
+        - Focuses on most relevant semantic connections
+        """)
+
+# Experimental parameters
+temperature = st.sidebar.slider(
+    "Temperature",
+    min_value=0.1,
+    max_value=2.0,
+    value=1.0,
+    step=0.1,
+    help="Controls model confidence calibration"
+)
+
+# Analysis prompt
+analysis_prompt = st.sidebar.text_area(
+    "Analysis Prompt",
+    placeholder="Enter specific instructions for relationship extraction...",
+    height=100,
+    help="Custom prompt to guide semantic analysis"
+)
+
+# Researcher identifier
+engineer = st.sidebar.text_input(
+    "Researcher ID",
+    placeholder="Optional researcher identifier",
+    help="For tracking experimental provenance"
+)
+
+# Clear cache for clean experiments
+if st.sidebar.button("🧹 Clear Cache", help="Reset for new experiment"):
+    st.session_state.bert_processor = None
+    st.session_state.gnn_processor = None
+    st.session_state.processed_data = None
+    st.session_state.graph = None
+    st.session_state.gnn_result = None
+    st.sidebar.success("Cache cleared - ready for new experiment")
+
+st.sidebar.divider()
+
+# Processing controls
+min_confidence = st.sidebar.slider(
+    "Minimum Confidence Threshold",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.3,
+    step=0.05,
+    help="Filter relationships below this confidence"
+)
+
+show_negative = st.sidebar.checkbox("Include Negative Relationships", value=True)
+show_indirect = st.sidebar.checkbox("Include Indirect Relationships", value=True)
+
+# Main interface
+st.title("🔬 BERT + Graph Neural Network Research Platform")
+st.markdown("**Academic research platform for comparing semantic relationship extraction across different neural architectures**")
+
+# Text input
+text_input = st.text_area(
+    "Text to Analyze",
+    height=150,
+    placeholder="Enter scientific text for semantic relationship extraction...",
+    help="Input text for experimental analysis"
+)
+
+# Process button
+col1, col2 = st.columns([1, 1])
+with col1:
+    process_button = st.button("🔬 Run Experiment", use_container_width=True, type="primary")
+with col2:
+    save_button = st.button("💾 Save to Database", use_container_width=True, 
+                           disabled=(not st.session_state.processed_data))
+
+# Processing logic
+if process_button and text_input:
+    st.session_state.current_text = text_input
     
-    # Get data from database
-    analysis_count = db.get_analysis_count()
-    relationship_count = db.get_relationship_count()
-    top_entities_df = db.get_top_entities(limit=20)
-    recent_analyses_df = db.get_recent_analyses(limit=10)
+    # Generate experiment ID
+    timestamp = datetime.datetime.now()
+    st.session_state.experiment_id = int(timestamp.timestamp())
     
-    # Display database statistics
-    st.subheader("Database Overview")
-    col1, col2 = st.columns(2)
-    col1.metric("Total Analyses", analysis_count)
-    col2.metric("Total Relationships", relationship_count)
+    # Initialize processors
+    if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
+        st.session_state.bert_processor = BERTProcessor(temperature=temperature)
     
-    # Export functionality
-    st.subheader("📤 Export Data")
+    if gnn_model != "None":
+        if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
+            st.session_state.gnn_processor = GNNProcessor(
+                model_type=gnn_model.lower(),
+                temperature=temperature
+            )
+    else:
+        st.session_state.gnn_processor = None
     
-    export_col1, export_col2 = st.columns([2, 1])
+    # Pipeline description
+    pipeline = "BERT" if gnn_model == "None" else f"BERT + {gnn_model}"
     
-    with export_col1:
-        export_full_history = st.checkbox(
-            "Export entire analysis history", 
-            value=False,
-            help="Check to export all analyses and relationships from the database"
+    with st.spinner(f"Running {pipeline} pipeline..."):
+        try:
+            # BERT processing
+            start_time = time.time()
+            bert_result = st.session_state.bert_processor.extract_relationships(
+                text_input, 
+                custom_prompt=analysis_prompt
+            )
+            bert_time = time.time() - start_time
+            
+            # Filter relationships
+            filtered_relationships = [
+                rel for rel in bert_result["relationships"]
+                if rel["confidence"] >= min_confidence
+            ]
+            
+            if not show_negative:
+                filtered_relationships = [
+                    rel for rel in filtered_relationships
+                    if rel["polarity"] != "negative"
+                ]
+            
+            if not show_indirect:
+                filtered_relationships = [
+                    rel for rel in filtered_relationships
+                    if rel["directness"] != "indirect"
+                ]
+            
+            # Graph construction
+            start_time = time.time()
+            graph = graph_utils.build_networkx_graph(filtered_relationships)
+            graph_time = time.time() - start_time
+            
+            # GNN processing
+            gnn_time = 0.0
+            gnn_result = None
+            
+            if gnn_model != "None" and st.session_state.gnn_processor:
+                start_time = time.time()
+                gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
+                gnn_time = time.time() - start_time
+                
+                # Apply GNN layout
+                if gnn_result and len(gnn_result.get("embeddings", [])) > 0:
+                    graph = graph_utils.apply_rgcn_layout(
+                        graph,
+                        gnn_result["embeddings"],
+                        gnn_result["entity_to_idx"]
+                    )
+            else:
+                # BERT-only: use spring layout
+                import networkx as nx
+                pos = nx.spring_layout(graph, seed=42)
+                nx.set_node_attributes(graph, {node: pos[node] for node in pos}, 'pos')
+            
+            # Store results
+            st.session_state.processed_data = {
+                "relationships": bert_result["relationships"],
+                "filtered_relationships": filtered_relationships,
+                "statistics": bert_result.get("statistics", {}),
+                "bert_time": bert_time,
+                "graph_time": graph_time,
+                "gnn_time": gnn_time,
+                "pipeline": pipeline,
+                "experiment_id": st.session_state.experiment_id
+            }
+            st.session_state.graph = graph
+            st.session_state.gnn_result = gnn_result
+            
+            # Display results
+            st.success(f"✅ Experiment completed - Pipeline: {pipeline}")
+            
+            # Metrics
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("BERT Time", f"{bert_time:.3f}s")
+            col2.metric("Graph Time", f"{graph_time:.3f}s")
+            if gnn_model != "None":
+                col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")
+            col4.metric("Relationships", len(filtered_relationships))
+            
+        except Exception as e:
+            st.error(f"❌ Experiment failed: {str(e)}")
+            logging.error(f"Processing error: {e}", exc_info=True)
+
+# Save experiment
+if save_button and st.session_state.processed_data:
+    with st.spinner("Saving experiment to database..."):
+        try:
+            data = st.session_state.processed_data
+            analysis_id = db.save_analysis(
+                text=st.session_state.current_text,
+                relationships=data["filtered_relationships"],
+                title=f"Experiment_{st.session_state.experiment_id}",
+                model_type=base_model.lower(),
+                gnn_architecture=gnn_model.lower() if gnn_model != "None" else "none",
+                temperature=temperature,
+                custom_prompt=analysis_prompt,
+                processing_time_bert=data["bert_time"],
+                processing_time_gnn=data["gnn_time"],
+                processing_time_graph=data["graph_time"]
+            )
+            
+            st.success(f"✅ Experiment saved with ID: {analysis_id}")
+            
+        except Exception as e:
+            st.error(f"❌ Save failed: {str(e)}")
+
+# Results display
+if st.session_state.processed_data and st.session_state.graph:
+    st.divider()
+    st.subheader("📊 Experimental Results")
+    
+    # Visualization tabs
+    viz_tab, data_tab, export_tab = st.tabs(["🔗 Graph Visualization", "📋 Data Analysis", "📤 Export"])
+    
+    with viz_tab:
+        try:
+            fig = visualization.create_relationship_graph_figure(
+                st.session_state.graph,
+                title=f"Semantic Graph - {st.session_state.processed_data['pipeline']}"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Visualization error: {str(e)}")
+    
+    with data_tab:
+        data = st.session_state.processed_data
+        
+        # Relationships table
+        if data["filtered_relationships"]:
+            df = pd.DataFrame(data["filtered_relationships"])
+            st.dataframe(df, use_container_width=True)
+        
+        # Statistics
+        st.subheader("Statistics")
+        stats_data = {
+            "Metric": ["Total Relationships", "Filtered Relationships", "Graph Nodes", "Graph Edges"],
+            "Value": [
+                len(data["relationships"]),
+                len(data["filtered_relationships"]),
+                st.session_state.graph.number_of_nodes(),
+                st.session_state.graph.number_of_edges()
+            ]
+        }
+        st.dataframe(pd.DataFrame(stats_data), hide_index=True)
+    
+    with export_tab:
+        st.subheader("🔬 Research Data Export")
+        
+        export_option = st.radio(
+            "Export Selection",
+            ["Export Current Experiment", "Export All Experiments", "Export Selected Experiments"],
+            help="Choose scope of data export for research analysis"
         )
         
-        if export_full_history:
-            st.info("This will export all analyses and their relationships from the database")
-        else:
-            st.info("This will export only the analyses visible in the recent list below")
-    
-    with export_col2:
-        if st.button("📥 Generate Export", use_container_width=True):
-            with st.spinner("Generating export data..."):
+        if export_option == "Export Selected Experiments":
+            # Get available experiments
+            try:
+                analyses_df = db.get_recent_analyses(limit=50)
+                if not analyses_df.empty:
+                    selected_ids = st.multiselect(
+                        "Select Experiments",
+                        options=analyses_df['id'].tolist(),
+                        format_func=lambda x: f"ID {x}: {analyses_df[analyses_df['id']==x]['title'].iloc[0] if not analyses_df[analyses_df['id']==x].empty else 'Unknown'}"
+                    )
+                else:
+                    st.info("No experiments found in database")
+                    selected_ids = []
+            except:
+                selected_ids = []
+        
+        if st.button("📥 Generate Research Export", use_container_width=True):
+            with st.spinner("Generating research data export..."):
                 try:
-                    # Create export data
-                    if export_full_history:
-                        export_df = create_export_data(include_full_history=True)
-                    else:
-                        # Export only recent analyses
-                        recent_ids = recent_analyses_df['id'].tolist() if not recent_analyses_df.empty else []
-                        export_df = create_export_data(selected_analysis_ids=recent_ids)
+                    from export_research import create_research_export
                     
-                    if not export_df.empty:
-                        # Generate CSV content
-                        csv_content = export_to_csv(export_df)
-                        
-                        # Get export statistics
-                        stats = get_export_statistics(export_df)
-                        
-                        # Display export info
-                        st.success(f"Export generated successfully!")
-                        st.write(f"**Export Statistics:**")
-                        st.write(f"- Total rows: {stats['total_rows']}")
-                        st.write(f"- Analyses: {stats['analyses_count']}")
-                        st.write(f"- Relationships: {stats['relationships_count']}")
-                        
-                        # Download button
-                        st.download_button(
-                            label="💾 Download CSV Export",
-                            data=csv_content,
-                            file_name=f"semantic_analysis_export_{stats['export_date'][:10]}.csv",
-                            mime="text/csv",
-                            use_container_width=True
+                    if export_option == "Export Current Experiment":
+                        export_data = create_research_export(
+                            current_experiment_id=st.session_state.experiment_id
                         )
+                    elif export_option == "Export All Experiments":
+                        export_data = create_research_export(export_all=True)
+                    else:
+                        export_data = create_research_export(
+                            selected_experiment_ids=selected_ids if 'selected_ids' in locals() else []
+                        )
+                    
+                    if export_data:
+                        elements_csv = export_data["elements"].to_csv(index=False, sep=';')
+                        connections_csv = export_data["connections"].to_csv(index=False, sep=';')
                         
-                        # Preview first few rows
-                        with st.expander("Preview Export Data"):
-                            st.dataframe(export_df.head(10), use_container_width=True)
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.download_button(
+                                label="📊 Download Elements CSV",
+                                data=elements_csv,
+                                file_name=f"research_elements_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
+                        
+                        with col2:
+                            st.download_button(
+                                label="🔗 Download Connections CSV",
+                                data=connections_csv,
+                                file_name=f"research_connections_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
+                        
+                        st.success("✅ Research export generated successfully")
+                        
+                        # Preview
+                        with st.expander("📋 Preview Export Data"):
+                            st.subheader("Elements")
+                            st.dataframe(export_data["elements"].head(10))
+                            st.subheader("Connections")
+                            st.dataframe(export_data["connections"].head(10))
                     
                     else:
                         st.warning("No data available for export")
                         
                 except Exception as e:
-                    st.error(f"Error generating export: {str(e)}")
-    
-    st.divider()
-    
-    # Display top entities
-    if not top_entities_df.empty:
-        st.subheader("Top Entities")
-        
-        # Create bar chart
-        entity_chart = px.bar(
-            top_entities_df, 
-            x="name", 
-            y="count",
-            title="Most Common Entities in Knowledge Base",
-            color="count",
-            color_continuous_scale="Viridis"
-        )
-        entity_chart.update_layout(xaxis={'categoryorder':'total descending'})
-        st.plotly_chart(entity_chart, use_container_width=True)
-    
-    # Recent analyses
-    if not recent_analyses_df.empty:
-        st.subheader("Recent Analyses")
-        
-        # Display table
-        st.dataframe(
-            recent_analyses_df.assign(
-                text_length=recent_analyses_df['text'].str.len()
-            ).rename(
-                columns={
-                    'id': 'ID',
-                    'title': 'Title',
-                    'timestamp': 'Date',
-                    'text_length': 'Text Length'
-                }
-            ),
-            use_container_width=True
-        )
-        
-        # Selected analysis details
-        selected_analysis_id = st.selectbox(
-            "Select an analysis to view details",
-            options=recent_analyses_df['id'].tolist(),
-            format_func=lambda x: f"#{x}: {recent_analyses_df.loc[recent_analyses_df['id']==x, 'title'].iloc[0] if not pd.isna(recent_analyses_df.loc[recent_analyses_df['id']==x, 'title'].iloc[0]) else 'Untitled'}"
-        )
-        
-        if selected_analysis_id:
-            # Get analysis and its relationships
-            analysis = db.get_analysis_by_id(selected_analysis_id)
-            relationships_df = db.get_relationships_by_analysis_id(selected_analysis_id)
-            
-            if analysis:
-                # Display analysis details
-                st.subheader(f"Analysis #{analysis['id']}: {analysis['title'] or 'Untitled'}")
-                st.caption(f"Created on {analysis['timestamp']}")
-                
-                # Display text in expander
-                with st.expander("View Text"):
-                    st.text_area("Analyzed Text", analysis['text'], height=150, disabled=True)
-                
-                if not relationships_df.empty:
-                    # Display relationships
-                    st.subheader("Extracted Relationships")
-                    st.dataframe(
-                        relationships_df,
-                        use_container_width=True,
-                        column_config={
-                            "confidence": st.column_config.ProgressColumn(
-                                "Confidence",
-                                help="Confidence score of the extracted relationship",
-                                format="%.2f",
-                                min_value=0,
-                                max_value=1,
-                            )
-                        }
-                    )
-                    
-                    # Create and display graph visualization
-                    st.subheader("Relationship Graph")
-                    
-                    # Convert relationships to format needed for graph
-                    rel_dicts = []
-                    for _, row in relationships_df.iterrows():
-                        rel_dict = {
-                            "subject": row['subject'],
-                            "predicate": row['predicate'],
-                            "object": row['object'],
-                            "confidence": row['confidence'],
-                            "polarity": row['polarity'],
-                            "directness": row['directness'],
-                            "sentence": row['sentence']
-                        }
-                        rel_dicts.append(rel_dict)
-                    
-                    # Build graph
-                    graph = graph_utils.build_networkx_graph(rel_dicts)
-                    communities = graph_utils.get_community_structure(graph)
-                    
-                    # Create visualization
-                    fig = create_relationship_graph_figure(
-                        graph,
-                        community_map=communities,
-                        title=f"Relationship Graph for Analysis #{analysis['id']}"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Option to delete the analysis
-                    if st.button("Delete Analysis", use_container_width=True, type="primary"):
-                        if db.delete_analysis(int(analysis['id'])):
-                            st.success(f"Analysis #{analysis['id']} deleted successfully")
-                            st.rerun()
-                        else:
-                            st.error("Failed to delete analysis")
-                else:
-                    st.info("No relationships found for this analysis.")
-    else:
-        st.info("No analyses found in the database. Process some text and save it to get started.")
+                    st.error(f"Export failed: {str(e)}")
 
-# Sidebar configuration
-st.sidebar.header("Input Options")
-
-# Database stats in sidebar
-st.sidebar.caption(f"Database: {analysis_count} analyses, {relationship_count} relationships")
-
-# Database options in expander
-with st.sidebar.expander("Saved Analyses"):
-    recent_analyses_df = db.get_recent_analyses(limit=5)
-    
-    if not recent_analyses_df.empty:
-        selected_analysis = st.selectbox(
-            "Load saved analysis",
-            options=[f"#{row['id']}: {row['title'] or 'Untitled'} ({row['timestamp']})" 
-                    for _, row in recent_analyses_df.iterrows()],
-            index=None,
-            placeholder="Select an analysis..."
-        )
-        
-        if selected_analysis:
-            # Extract analysis ID from selection
-            analysis_id = int(selected_analysis.split(":")[0][1:])
-            
-            # Load button
-            if st.button("Load Selected Analysis", use_container_width=True):
-                # Get analysis and relationships
-                analysis = db.get_analysis_by_id(analysis_id)
-                relationships_df = db.get_relationships_by_analysis_id(analysis_id)
-                
-                if analysis:
-                    st.session_state.current_text = analysis['text']
-                    
-                    # Convert to the format expected by the app
-                    rel_dicts = []
-                    for _, row in relationships_df.iterrows():
-                        rel_dict = {
-                            "subject": row['subject'],
-                            "predicate": row['predicate'],
-                            "object": row['object'],
-                            "confidence": row['confidence'],
-                            "polarity": row['polarity'],
-                            "directness": row['directness'],
-                            "sentence": row['sentence']
-                        }
-                        rel_dicts.append(rel_dict)
-                    
-                    # Rerun to update the UI
-                    st.rerun()
-    else:
-        st.caption("No saved analyses found")
-
-# Input method selection
-input_method = st.sidebar.radio(
-    "Choose input method",
-    ["Text Input", "File Upload", "Sample Text"]
-)
-
-# Sample texts
-sample_texts = {
-    "Scientific": """
-    Climate change is causing global temperatures to rise. Rising temperatures lead to melting ice caps.
-    Melting ice caps contribute to sea level rise. Sea level rise threatens coastal cities.
-    Greenhouse gases trap heat in the atmosphere. Human activities produce greenhouse gases.
-    Renewable energy can reduce carbon emissions. Carbon emissions accelerate climate change.
-    """,
-    
-    "News": """
-    The Federal Reserve raised interest rates yesterday. Higher interest rates may slow economic growth.
-    The company announced a new product launch. The new product features advanced AI capabilities.
-    Investors responded positively to the earnings report. The market showed strong performance this quarter.
-    The president met with foreign leaders to discuss trade agreements. International relations influence economic policies.
-    """,
-    
-    "Educational": """
-    Photosynthesis converts light energy into chemical energy. Plants use chlorophyll to capture sunlight.
-    The water cycle involves evaporation, condensation, and precipitation. Clouds form when water vapor condenses.
-    Mitochondria are the powerhouse of the cell. DNA contains genetic instructions for development and functioning.
-    The Pythagorean theorem relates the sides of a right triangle. Mathematics provides tools for solving complex problems.
-    """
-}
-
-# Text input
-text_for_analysis = ""
-
-if input_method == "Text Input":
-    text_for_analysis = st.sidebar.text_area(
-        "Enter text to analyze",
-        height=200,
-        help="Input text you want to extract relationships from"
-    )
-    
-elif input_method == "File Upload":
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload a text file",
-        type=["txt", "md", "csv"],
-        help="Upload a text file to extract relationships from"
-    )
-    
-    if uploaded_file is not None:
-        # Handle different file types
-        if uploaded_file.name.endswith('.csv'):
-            # For CSV, let user select the column
-            df = pd.read_csv(uploaded_file)
-            st.sidebar.subheader("CSV File Loaded")
-            text_column = st.sidebar.selectbox(
-                "Select text column",
-                df.columns.tolist()
-            )
-            text_for_analysis = "\n".join(df[text_column].astype(str).tolist())
-        else:
-            # For other text files
-            text_for_analysis = StringIO(uploaded_file.getvalue().decode("utf-8")).read()
-        
-        # Show a preview
-        st.sidebar.subheader("Preview")
-        st.sidebar.text(textwrap.shorten(text_for_analysis, width=300, placeholder="..."))
-
-elif input_method == "Sample Text":
-    sample_choice = st.sidebar.selectbox(
-        "Select a sample text",
-        list(sample_texts.keys())
-    )
-    text_for_analysis = sample_texts[sample_choice]
-    st.sidebar.text_area("Sample Text Preview", text_for_analysis, height=150, disabled=True)
-
-# Scientific Research Configuration
-st.sidebar.header("🔬 Scientific Research Setup")
-
-# GNN Model Selection
-gnn_model = st.sidebar.selectbox(
-    "GNN Architecture",
-    ["None", "RGCN", "CompGCN", "RGAT"],
-    help="Select Graph Neural Network architecture for comparison (None = BERT only)"
-)
-
-# Add detailed explanations for each GNN option
-with st.sidebar.expander("🔍 GNN Architecture Explanations"):
-    if gnn_model == "None":
-        st.markdown("""
-        **BERT Only (Baseline)**
-        - Pure BERT-based relationship extraction without graph neural networks
-        - Uses spaCy's transformer models for dependency parsing and NER
-        - Provides clean baseline for comparing GNN enhancements
-        
-        **Why chosen:** Essential control group for scientific measurement
-        
-        **Research focus:** Establishes baseline performance for semantic extraction
-        """)
-    elif gnn_model == "RGCN":
-        st.markdown("""
-        **Relational Graph Convolutional Network (RGCN)**
-        - Extends GCN to handle multiple relation types in knowledge graphs
-        - Uses relation-specific weight matrices for different edge types
-        - Excellent for heterogeneous graphs with diverse relationship types
-        
-        **Why chosen:** Handles semantic relationships with different polarities/directness
-        
-        **Research focus:** How relation-aware convolutions improve relationship understanding
-        """)
-    elif gnn_model == "CompGCN":
-        st.markdown("""
-        **Composition-based Graph Convolutional Network (CompGCN)**
-        - Jointly embeds both entities and relations in the same space
-        - Uses composition functions (multiplication, subtraction, circular correlation)
-        - Learns rich representations by combining entity and relation embeddings
-        
-        **Why chosen:** Captures complex entity-relation interactions in semantic graphs
-        
-        **Research focus:** How joint embedding affects semantic relationship quality
-        """)
-    elif gnn_model == "RGAT":
-        st.markdown("""
-        **Relational Graph Attention Network (RGAT)**
-        - Combines attention mechanisms with relational graph processing
-        - Learns importance weights for different neighbors and relation types
-        - Provides interpretable attention scores for relationship importance
-        
-        **Why chosen:** Attention can highlight most relevant semantic connections
-        
-        **Research focus:** How attention improves focus on key relationships
-        """)
-
-# Temperature Control
-temperature = st.sidebar.slider(
-    "Temperature",
-    min_value=0.1,
-    max_value=3.0,
-    value=1.0,
-    step=0.1,
-    help="Temperature parameter for model calibration (lower = more confident)"
-)
-
-# Custom Prompt Input
-custom_prompt = st.sidebar.text_area(
-    "Custom Analysis Prompt",
-    placeholder="Enter specific instructions for relationship extraction...",
-    height=100,
-    help="Custom prompt to guide the analysis focus"
-)
-
-# Clear cache button for clean measurements
-if st.sidebar.button("🧹 Clear Cache", help="Clear all cached data for clean measurement"):
-    st.session_state.bert_processor = None
-    st.session_state.gnn_processor = None
-    st.session_state.processed_data = None
-    st.session_state.graph = None
-    st.session_state.rgcn_result = None
-    st.sidebar.success("Cache cleared!")
-
+# Database status
 st.sidebar.divider()
-
-# Processing options
-st.sidebar.header("Processing Options")
-
-min_confidence = st.sidebar.slider(
-    "Minimum confidence threshold",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.5,
-    step=0.05,
-    help="Filter relationships with confidence below this threshold"
-)
-
-# Advanced options in expander
-with st.sidebar.expander("Advanced Options"):
-    if gnn_model == "None":
-        visualization_type = st.selectbox(
-            "Visualization type",
-            ["Graph (Force Layout)", "Adjacency Matrix", "Sankey Diagram"]
-        )
-    else:
-        visualization_type = st.selectbox(
-            "Visualization type",
-            ["Graph (GNN Layout)", "Graph (Force Layout)", "Adjacency Matrix", "Sankey Diagram"]
-        )
-    
-    show_negative = st.checkbox("Show negative relationships", value=True)
-    show_indirect = st.checkbox("Show indirect relationships", value=True)
-    
-    highlight_entity = st.text_input(
-        "Highlight entity (leave empty for none)",
-        "",
-        help="Enter an entity name to highlight in visualizations"
-    )
-
-# Add title field and save option
-analysis_title = st.sidebar.text_input("Analysis Title (for saving)", "", help="Optional title when saving this analysis")
-
-# Process and save options
-col1, col2 = st.sidebar.columns(2)
-process_button = col1.button("Process Text", use_container_width=True)
-save_button = col2.button("Save to DB", use_container_width=True, disabled=(not st.session_state.processed_data))
-
-# Main content tab
-with main_tab:
-    # Handle save button click
-    if save_button and st.session_state.processed_data:
-        with st.spinner("Saving analysis to database..."):
-            # Save analysis with title if provided
-            title = analysis_title if analysis_title else None
-            # Get processing times from session state if available
-            bert_time = getattr(st.session_state, 'last_bert_time', 0.0)
-            gnn_time = getattr(st.session_state, 'last_gnn_time', 0.0) 
-            graph_time = getattr(st.session_state, 'last_graph_time', 0.0)
-            
-            analysis_id = db.save_analysis(
-                text=st.session_state.current_text,
-                relationships=st.session_state.processed_data.get("filtered_relationships", []),
-                title=title,
-                model_type='bert',
-                gnn_architecture=gnn_model.lower() if gnn_model != "None" else "none",
-                temperature=temperature,
-                custom_prompt=custom_prompt,
-                processing_time_bert=bert_time,
-                processing_time_gnn=gnn_time,
-                processing_time_graph=graph_time
-            )
-            
-            # Show success message
-            st.success(f"Analysis saved to database with ID: {analysis_id}")
-            
-            # Reset title field
-            analysis_title = ""
-            
-            # Force rerun to update database stats
-            st.rerun()
-
-    # Handle process button click
-    if process_button and text_for_analysis:
-        # Store the current text in session state
-        st.session_state.current_text = text_for_analysis
-        
-        # Initialize processors with current settings
-        if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
-            st.session_state.bert_processor = BERTProcessor(temperature=temperature)
-        
-        # Only initialize GNN processor if not "None"
-        if gnn_model != "None":
-            if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
-                st.session_state.gnn_processor = GNNProcessor(
-                    model_type=gnn_model.lower(),
-                    temperature=temperature
-                )
-        else:
-            st.session_state.gnn_processor = None
-        
-        # Create processing container
-        pipeline_description = "BERT only" if gnn_model == "None" else f"BERT + {gnn_model}"
-        with st.spinner(f"Processing text with {pipeline_description}..."):
-            # Clear previous results
-            st.session_state.processed_data = None
-            st.session_state.graph = None
-            st.session_state.rgcn_result = None
-            
-            try:
-                # Step 1: Process text with BERT
-                start_time = time.time()
-                processed_data = st.session_state.bert_processor.extract_relationships(
-                    text_for_analysis, 
-                    custom_prompt=custom_prompt
-                )
-                bert_time = time.time() - start_time
-                
-                # Filter relationships by confidence
-                filtered_relationships = [
-                    rel for rel in processed_data["relationships"]
-                    if rel["confidence"] >= min_confidence
-                ]
-                
-                # Filter by polarity and directness if needed
-                if not show_negative:
-                    filtered_relationships = [
-                        rel for rel in filtered_relationships
-                        if rel["polarity"] != "negative"
-                    ]
-                    
-                if not show_indirect:
-                    filtered_relationships = [
-                        rel for rel in filtered_relationships
-                        if rel["directness"] != "indirect"
-                    ]
-                    
-                # Update the processed data with filtered relationships
-                processed_data["filtered_relationships"] = filtered_relationships
-                
-                # Step 2: Build graph
-                start_time = time.time()
-                graph = graph_utils.build_networkx_graph(filtered_relationships)
-                graph_time = time.time() - start_time
-                
-                # Step 3: Process with selected GNN (skip if None)
-                gnn_time = 0.0
-                gnn_result = None
-                
-                if gnn_model != "None" and st.session_state.gnn_processor is not None:
-                    start_time = time.time()
-                    gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
-                    gnn_time = time.time() - start_time
-                    
-                    # Step 4: Apply GNN layout to graph
-                    if len(gnn_result["embeddings"]) > 0:
-                        graph_with_layout = graph_utils.apply_rgcn_layout(
-                            graph,
-                            gnn_result["embeddings"],
-                            gnn_result["entity_to_idx"]
-                        )
-                    else:
-                        graph_with_layout = graph
-                else:
-                    # BERT-only pipeline: use simple spring layout
-                    import networkx as nx
-                    pos = nx.spring_layout(graph, seed=42)
-                    nx.set_node_attributes(graph, {node: position for node, position in pos.items()}, 'pos')
-                    graph_with_layout = graph
-                    
-                    # Create empty GNN result for BERT-only
-                    gnn_result = {
-                        "embeddings": [],
-                        "entity_to_idx": {},
-                        "relation_to_idx": {},
-                        "processing_time": 0.0,
-                        "model_type": "none"
-                    }
-                
-                # Store results in session state
-                st.session_state.processed_data = processed_data
-                st.session_state.graph = graph_with_layout
-                st.session_state.rgcn_result = gnn_result
-                
-                # Store timing data for later use in save
-                st.session_state.last_bert_time = bert_time
-                st.session_state.last_gnn_time = gnn_time
-                st.session_state.last_graph_time = graph_time
-                
-                # Show timing info and performance metrics
-                if gnn_model == "None":
-                    col1, col2 = st.columns(2)
-                    col1.metric("BERT Time", f"{bert_time:.3f}s")
-                    col2.metric("Graph Time", f"{graph_time:.3f}s")
-                else:
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("BERT Time", f"{bert_time:.3f}s")
-                    col2.metric("Graph Time", f"{graph_time:.3f}s") 
-                    col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")
-                
-                # Performance comparison info
-                total_time = bert_time + graph_time + gnn_time
-                st.info(f"""
-                **Scientific Measurement Results:**
-                - Pipeline: {pipeline_description}
-                - Temperature: {temperature}
-                - Relationships extracted: {len(filtered_relationships)}
-                - Total processing time: {total_time:.3f}s
-                """)
-                
-            except Exception as e:
-                st.error(f"Error processing text: {str(e)}")
-                st.error("Please check if spaCy English model is installed: `python -m spacy download en_core_web_sm`")
-
-    # Display results if available
-    if st.session_state.processed_data and st.session_state.graph:
-        # Get data from session state
-        processed_data = st.session_state.processed_data
-        graph = st.session_state.graph
-        rgcn_result = st.session_state.rgcn_result
-        
-        # Setup main display area
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.header("Relationship Visualization")
-            
-            # Create highlight lists for visualization if an entity is specified
-            highlight_nodes = []
-            highlight_edges = []
-            
-            if highlight_entity and highlight_entity in graph.nodes():
-                highlight_nodes = [highlight_entity]
-                # Find edges connected to the highlighted entity
-                highlight_edges = [
-                    (u, v) for u, v in graph.edges()
-                    if u == highlight_entity or v == highlight_entity
-                ]
-            
-            # Get community structure
-            communities = graph_utils.get_community_structure(graph)
-            
-            # Visualize based on selected type
-            if visualization_type == "Graph (RGCN Layout)" or visualization_type == "Graph (GNN Layout)":
-                # Create figure using GNN layout
-                gnn_model_name = st.session_state.rgcn_result.get("model_type", "GNN") if st.session_state.rgcn_result else "GNN"
-                fig = create_relationship_graph_figure(
-                    graph,
-                    community_map=communities,
-                    highlight_nodes=highlight_nodes,
-                    highlight_edges=highlight_edges,
-                    title=f"Semantic Relationship Graph ({gnn_model_name.upper()} Layout)"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-            elif visualization_type == "Graph (Force Layout)":
-                # Import networkx since we need it directly here
-                import networkx as nx
-                
-                # Use force layout
-                pos = nx.spring_layout(graph, seed=42)
-                nx.set_node_attributes(graph, {node: position for node, position in pos.items()}, 'pos')
-                
-                fig = create_relationship_graph_figure(
-                    graph,
-                    community_map=communities,
-                    highlight_nodes=highlight_nodes,
-                    highlight_edges=highlight_edges,
-                    title="Semantic Relationship Graph (Force Layout)"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-            elif visualization_type == "Adjacency Matrix":
-                # Create adjacency matrix visualization
-                # Get entities
-                entities = list(graph.nodes())
-                n = len(entities)
-                
-                if n > 0:
-                    # Create matrix
-                    adj_matrix = np.zeros((n, n))
-                    entity_to_idx = {entity: i for i, entity in enumerate(entities)}
-                    
-                    # Fill matrix
-                    for u, v, data in graph.edges(data=True):
-                        i, j = entity_to_idx[u], entity_to_idx[v]
-                        adj_matrix[i, j] = data.get('confidence', 0.5)
-                    
-                    # Create heatmap
-                    fig = create_heatmap_figure(
-                        adj_matrix,
-                        entities,
-                        title="Relationship Adjacency Matrix"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("No relationships to visualize")
-                    
-            elif visualization_type == "Sankey Diagram":
-                # Create Sankey diagram
-                fig = create_sankey_diagram(
-                    graph,
-                    weight_attr='confidence',
-                    title="Relationship Flow Diagram"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # Show statistics
-            st.header("Statistics")
-            
-            # Scientific Performance Metrics
-            st.subheader("📊 Performance Metrics")
-            
-            # Model information
-            bert_metrics = st.session_state.bert_processor.get_performance_metrics() if st.session_state.bert_processor else {}
-            gnn_metrics = st.session_state.gnn_processor.get_performance_metrics() if st.session_state.gnn_processor else {}
-            
-            # Performance comparison table
-            if gnn_model == "None":
-                metrics_df = pd.DataFrame({
-                    "Component": ["BERT"],
-                    "Processing Time": [f"{bert_metrics.get('processing_time', 0):.4f}s"],
-                    "Temperature": [f"{bert_metrics.get('temperature', temperature):.2f}"]
-                })
-            else:
-                metrics_df = pd.DataFrame({
-                    "Component": ["BERT", gnn_model],
-                    "Processing Time": [
-                        f"{bert_metrics.get('processing_time', 0):.4f}s",
-                        f"{gnn_metrics.get('processing_time', 0):.4f}s"
-                    ],
-                    "Temperature": [
-                        f"{bert_metrics.get('temperature', temperature):.2f}",
-                        f"{gnn_metrics.get('temperature', temperature):.2f}"
-                    ]
-                })
-            
-            st.dataframe(metrics_df, use_container_width=True)
-            
-            # Graph statistics
-            graph_stats = graph_utils.get_graph_statistics(graph)
-            
-            st.subheader("Graph Metrics")
-            metrics_col1, metrics_col2 = st.columns(2)
-            metrics_col1.metric("Entities", graph_stats["num_nodes"])
-            metrics_col2.metric("Relationships", graph_stats["num_edges"])
-            
-            metrics_col1.metric("Avg. Connections", f"{graph_stats['avg_degree']:.2f}")
-            metrics_col2.metric("Graph Density", f"{graph_stats['density']:.3f}")
-            
-            # Scientific comparison data
-            if processed_data.get("custom_prompt"):
-                st.subheader("Analysis Configuration")
-                st.text_area("Custom Prompt Used", processed_data["custom_prompt"], disabled=True, height=60)
-            
-            # Polarity and directness distributions
-            if "statistics" in processed_data:
-                stats = processed_data["statistics"]
-                
-                if "polarity_distribution" in stats:
-                    st.subheader("Polarity Distribution")
-                    pol_dist = stats["polarity_distribution"]
-                    
-                    # Create data for bar chart
-                    labels = list(pol_dist.keys())
-                    values = list(pol_dist.values())
-                    
-                    fig = create_bar_chart(
-                        labels, values,
-                        "Relationship Polarity",
-                        "Polarity", "Count"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                if "directness_distribution" in stats:
-                    st.subheader("Directness Distribution")
-                    dir_dist = stats["directness_distribution"]
-                    
-                    # Create data for bar chart
-                    labels = list(dir_dist.keys())
-                    values = list(dir_dist.values())
-                    
-                    fig = create_bar_chart(
-                        labels, values,
-                        "Relationship Directness",
-                        "Directness", "Count"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-        
-        # Display extracted relationships
-        st.header("Extracted Relationships")
-        
-        if "filtered_relationships" in processed_data:
-            relationships = processed_data["filtered_relationships"]
-            
-            if relationships:
-                # Create DataFrame for display
-                df_data = []
-                for rel in relationships:
-                    df_data.append({
-                        "Subject": rel["subject"],
-                        "Predicate": rel["predicate"],
-                        "Object": rel["object"],
-                        "Confidence": f"{rel['confidence']:.2f}",
-                        "Polarity": rel["polarity"],
-                        "Directness": rel["directness"]
-                    })
-                
-                rel_df = pd.DataFrame(df_data)
-                
-                # Display table with sorting
-                st.dataframe(
-                    rel_df,
-                    use_container_width=True,
-                    column_config={
-                        "Confidence": st.column_config.ProgressColumn(
-                            "Confidence",
-                            help="Confidence score of the extracted relationship",
-                            format="%.2f",
-                            min_value=0,
-                            max_value=1,
-                        ),
-                        "Polarity": st.column_config.SelectboxColumn(
-                            "Polarity",
-                            help="Sentiment polarity of the relationship",
-                            options=["positive", "negative", "neutral"],
-                            width="medium"
-                        ),
-                        "Directness": st.column_config.SelectboxColumn(
-                            "Directness",
-                            help="Whether the relationship is direct or indirect",
-                            options=["direct", "indirect"],
-                            width="medium"
-                        )
-                    }
-                )
-            else:
-                st.warning("No relationships found that meet the filtering criteria.")
-        
-        # Display important paths
-        st.header("Important Relationship Paths")
-        important_paths = graph_utils.find_important_paths(graph, top_n=3, min_confidence=min_confidence)
-        
-        if important_paths:
-            for i, path_data in enumerate(important_paths):
-                path = path_data["path"]
-                avg_confidence = path_data["avg_confidence"]
-                edge_data = path_data["edge_data"]
-                
-                # Create path description
-                path_str = " → ".join(path)
-                
-                with st.expander(f"Path {i+1}: {path_str} (Confidence: {avg_confidence:.2f})"):
-                    # Show edges in the path
-                    for j in range(len(path) - 1):
-                        subj = path[j]
-                        obj = path[j + 1]
-                        data = edge_data[j]
-                        
-                        st.write(f"**{subj}** ─[*{data.get('predicate', '')}*]→ **{obj}**")
-                        st.caption(f"Confidence: {data.get('confidence', 0):.2f} | Polarity: {data.get('polarity', 'neutral')} | Directness: {data.get('directness', 'direct')}")
-                        if 'sentence' in data:
-                            st.caption(f"Context: '{data['sentence']}'")
-                        st.divider()
-        else:
-            st.info("No significant paths found with the current confidence threshold.")
-        
-        # Display RDF triples
-        if "rdf_triples" in processed_data:
-            with st.expander("View RDF Triples"):
-                triples = processed_data["rdf_triples"]
-                
-                triple_df = pd.DataFrame([
-                    {"Subject": s, "Predicate": p, "Object": o}
-                    for s, p, o in triples
-                ])
-                
-                st.dataframe(triple_df, use_container_width=True)
+st.sidebar.subheader("📊 Database Status")
+try:
+    analysis_count = db.get_analysis_count()
+    relationship_count = db.get_relationship_count()
+    st.sidebar.metric("Experiments", analysis_count)
+    st.sidebar.metric("Relationships", relationship_count)
+except:
+    st.sidebar.error("Database connection error")
