@@ -215,23 +215,31 @@ with st.expander("🎓 Research Methodology & Scientific Rationale"):
     **Methodology**: Controlled experimental comparison of four neural architectures:
     
     #### 1. BERT Baseline (Control Group)
-    - **Purpose**: Establishes transformer-only performance baseline
-    - **Implementation**: Pure BERT encoder with rule-based relationship extraction using dependency parsing
+    - **Model Specification**: `en_core_web_sm` (spaCy 3.x) with BERT-based transformer
+    - **Architecture**: 12-layer transformer, 768 hidden units, 12 attention heads
+    - **Parameters**: ~110M parameters, pre-trained on English web text
+    - **Implementation**: Dependency parsing (Universal Dependencies) + Named Entity Recognition
     - **Scientific Value**: Isolates GNN contribution by providing non-graph control condition
     
     #### 2. RGCN (Relational Graph Convolutional Network)
-    - **Research Hypothesis**: Relation-specific weight matrices capture semantic relationship diversity better than homogeneous processing
-    - **Key Innovation**: W_r matrices for each relation type (causal, temporal, hierarchical, etc.)
+    - **Model Specification**: PyTorch implementation with relation-specific weight decomposition
+    - **Architecture**: 2 layers, 128 input features, 64 hidden units, 32 output dimensions
+    - **Parameters**: Basis decomposition with 30 basis matrices for parameter efficiency
+    - **Key Innovation**: W_r = Σᵢ aᵢᵣVᵢ matrices for each relation type r
     - **Scientific Contribution**: Tests whether heterogeneous graph processing improves relationship classification accuracy
     
     #### 3. CompGCN (Composition-based Graph Convolutional Network)  
-    - **Research Hypothesis**: Joint entity-relation embedding in unified vector space captures compositional semantics
-    - **Key Innovation**: Composition functions (⊙, ⊖, ⋆) combining entity and relation representations during message passing
+    - **Model Specification**: PyTorch implementation with compositional message passing
+    - **Architecture**: 2 layers, 128 input features, 64 hidden units, 32 output dimensions
+    - **Parameters**: Shared entity-relation embeddings, multiplication composition function
+    - **Key Innovation**: h_v^(l+1) = σ(W_O · COMP(h_v^l, h_r^l)) with composition operators
     - **Scientific Contribution**: Evaluates unified vs. separate entity/relation processing approaches
     
     #### 4. RGAT (Relational Graph Attention Network)
-    - **Research Hypothesis**: Learnable attention mechanisms automatically identify semantically important relationships
-    - **Key Innovation**: Multi-head attention α_ij^r over relation-specific message aggregation
+    - **Model Specification**: PyTorch implementation with multi-head relational attention
+    - **Architecture**: 2 layers, 128 input features, 64 hidden units, 32 output dimensions, 4 attention heads
+    - **Parameters**: Relation-specific attention weights, 0.1 dropout rate
+    - **Key Innovation**: α_ij^r = softmax(LeakyReLU(a^T[W_h h_i || W_h h_j || W_r r_ij]))
     - **Scientific Contribution**: Tests interpretable attention vs. uniform relationship weighting
     
     ### Experimental Controls (Following Scientific Best Practices)
