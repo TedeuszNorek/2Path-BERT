@@ -115,38 +115,38 @@ st.sidebar.markdown("*Set different temperatures for each model configuration*")
 # Base BERT temperature
 bert_temperature = st.sidebar.slider(
     "BERT Baseline Temperature",
-    min_value=0.1,
-    max_value=3.0,
-    value=1.0,
-    step=0.1,
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
     help="Temperature for BERT-only processing"
 )
 
 # GNN temperatures
 rgcn_temperature = st.sidebar.slider(
     "RGCN Temperature",
-    min_value=0.1,
-    max_value=3.0,
-    value=1.0,
-    step=0.1,
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
     help="Temperature for BERT+RGCN processing"
 )
 
 compgcn_temperature = st.sidebar.slider(
     "CompGCN Temperature", 
-    min_value=0.1,
-    max_value=3.0,
-    value=1.0,
-    step=0.1,
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
     help="Temperature for BERT+CompGCN processing"
 )
 
 rgat_temperature = st.sidebar.slider(
     "RGAT Temperature",
-    min_value=0.1,
-    max_value=3.0,
-    value=1.0,
-    step=0.1,
+    min_value=0.0,
+    max_value=1.0,
+    value=0.5,
+    step=0.05,
     help="Temperature for BERT+RGAT processing"
 )
 
