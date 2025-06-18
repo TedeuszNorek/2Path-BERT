@@ -90,15 +90,59 @@ with st.sidebar.expander("🔍 Model Explanations"):
         - Focuses on most relevant semantic connections
         """)
 
-# Experimental parameters
-temperature = st.sidebar.slider(
-    "Temperature",
+# Temperature controls for each model configuration
+st.sidebar.subheader("🌡️ Temperature Controls")
+st.sidebar.markdown("*Set different temperatures for each model configuration*")
+
+# Base BERT temperature
+bert_temperature = st.sidebar.slider(
+    "BERT Baseline Temperature",
     min_value=0.1,
-    max_value=2.0,
+    max_value=3.0,
     value=1.0,
     step=0.1,
-    help="Controls model confidence calibration"
+    help="Temperature for BERT-only processing"
 )
+
+# GNN temperatures
+rgcn_temperature = st.sidebar.slider(
+    "RGCN Temperature",
+    min_value=0.1,
+    max_value=3.0,
+    value=1.0,
+    step=0.1,
+    help="Temperature for BERT+RGCN processing"
+)
+
+compgcn_temperature = st.sidebar.slider(
+    "CompGCN Temperature", 
+    min_value=0.1,
+    max_value=3.0,
+    value=1.0,
+    step=0.1,
+    help="Temperature for BERT+CompGCN processing"
+)
+
+rgat_temperature = st.sidebar.slider(
+    "RGAT Temperature",
+    min_value=0.1,
+    max_value=3.0,
+    value=1.0,
+    step=0.1,
+    help="Temperature for BERT+RGAT processing"
+)
+
+# Select active temperature based on current model
+if gnn_model == "None":
+    temperature = bert_temperature
+elif gnn_model == "RGCN":
+    temperature = rgcn_temperature
+elif gnn_model == "CompGCN":
+    temperature = compgcn_temperature
+elif gnn_model == "RGAT":
+    temperature = rgat_temperature
+else:
+    temperature = bert_temperature
 
 # Analysis prompt
 analysis_prompt = st.sidebar.text_area(
