@@ -183,7 +183,9 @@ def get_analysis_by_id(analysis_id: int) -> Dict[str, Any]:
         Dictionary with analysis data or empty dict if not found
     """
     conn = sqlite3.connect(DB_PATH)
-    query = 'SELECT id, text, timestamp, title FROM analyses WHERE id = ?'
+    query = '''SELECT id, text, timestamp, title, model_type, gnn_architecture, 
+               temperature, custom_prompt, processing_time_bert, processing_time_gnn, 
+               processing_time_graph FROM analyses WHERE id = ?'''
     df = pd.read_sql_query(query, conn, params=[analysis_id])
     conn.close()
     
