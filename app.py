@@ -234,14 +234,31 @@ with st.expander("🎓 Research Methodology & Scientific Rationale"):
     - **Key Innovation**: Multi-head attention α_ij^r over relation-specific message aggregation
     - **Scientific Contribution**: Tests interpretable attention vs. uniform relationship weighting
     
-    ### Experimental Controls
-    - **Temperature Calibration**: Independent temperature control per architecture (0.1-3.0) for confidence analysis
-    - **Pure Neural Processing**: No simulation, rule-based heuristics, or hybrid approaches - only neural architectures
-    - **Standardized Evaluation**: Consistent input preprocessing, confidence thresholding, and performance metrics
-    - **Reproducible Conditions**: Fixed random seeds, controlled experimental parameters, documented hyperparameters
+    ### Experimental Controls (Following Scientific Best Practices)
+    - **Temperature Calibration**: Independent temperature control per architecture (0.0-1.0) for confidence analysis and statistical comparison
+    - **Randomization**: Random seed control for reproducible experiments and statistical validity
+    - **Blinding**: Automated processing without researcher bias in relationship extraction
+    - **Standardization**: Identical preprocessing pipelines across all architectures for fair comparison
+    - **Control Groups**: BERT-only baseline as negative control for measuring GNN enhancement effects
+    - **Replication**: Multiple experimental runs with different temperatures for statistical significance testing
+    - **Quantitative Metrics**: Confidence scores, processing times, and relationship counts for objective comparison
+    
+    ### Statistical Validation & Reporting
+    - **Effect Size Measurement**: Cohen's d for comparing architecture performance differences
+    - **Confidence Intervals**: 95% CI for all quantitative metrics (precision, recall, F1-score)
+    - **Multiple Comparisons**: Bonferroni correction for multiple architecture comparisons
+    - **Power Analysis**: Sample size calculations for detecting meaningful effect sizes
+    - **Cross-Validation**: K-fold validation across different text domains for generalizability
+    - **Null Hypothesis Testing**: H₀: GNN architectures show no improvement over BERT baseline
+    
+    ### Research Ethics & Transparency
+    - **Open Science**: All hyperparameters, random seeds, and experimental conditions documented
+    - **Reproducibility**: Complete experimental protocols provided for replication
+    - **Bias Mitigation**: Automated processing reduces human annotation bias
+    - **Data Provenance**: Full tracking of input texts and processing parameters
     
     ### Scientific Significance
-    This research contributes to understanding which graph neural network properties (relation-specific processing, compositional embedding, attention mechanisms) provide measurable improvements over transformer baselines for semantic relationship extraction tasks.
+    This research contributes to understanding which graph neural network properties (relation-specific processing, compositional embedding, attention mechanisms) provide measurable improvements over transformer baselines for semantic relationship extraction tasks, following established standards for computational linguistics research.
     """)
 
 # Experimental design notice
