@@ -272,6 +272,42 @@ with st.expander("🎓 Research Methodology & Scientific Rationale"):
 # Experimental design notice
 st.info("**Experimental Design**: This platform implements pure neural architectures without simulations or synthetic data. All processing uses authentic BERT and GNN implementations for rigorous scientific comparison.")
 
+# Model Specifications - Always Visible
+st.subheader("🔧 Model Specifications")
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("""
+    **BERT Baseline (Control)**
+    - Model: `en_core_web_sm` (spaCy 3.x)
+    - Architecture: 12 layers, 768 hidden units, 12 attention heads
+    - Parameters: ~110M, pre-trained on English web text
+    - Implementation: Universal Dependencies + NER
+    
+    **RGCN (Schlichtkrull et al., 2018)**
+    - Architecture: 2 layers, 128→64→32 dimensions
+    - Parameters: Basis decomposition with 30 basis matrices
+    - Formula: W_r = Σᵢ aᵢᵣVᵢ for each relation type r
+    - Innovation: Relation-specific weight matrices
+    """)
+
+with col2:
+    st.markdown("""
+    **CompGCN (Vashishth et al., 2020)**
+    - Architecture: 2 layers, 128→64→32 dimensions
+    - Parameters: Shared entity-relation embeddings
+    - Formula: h_v^(l+1) = σ(W_O · COMP(h_v^l, h_r^l))
+    - Innovation: Compositional message passing
+    
+    **RGAT (Busbridge et al., 2019)**
+    - Architecture: 2 layers, 128→64→32 dimensions, 4 attention heads
+    - Parameters: Dropout 0.1, relation-specific attention weights
+    - Formula: α_ij^r = softmax(LeakyReLU(a^T[W_h h_i || W_h h_j || W_r r_ij]))
+    - Innovation: Multi-head relational attention
+    """)
+
+st.divider()
+
 # Text input
 text_input = st.text_area(
     "Text to Analyze",
