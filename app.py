@@ -360,13 +360,13 @@ if process_button and text_input:
     
     with st.spinner(f"🧠 Running {pipeline} pipeline..."):
         try:
-            # BERT processing
-            status_placeholder.info("🔍 **Step 1/4:** BERT analyzing semantic relationships...")
+            # BERT processing - analyze input text only
+            status_placeholder.info("🔍 **Step 1/4:** BERT analyzing semantic relationships from input text...")
             progress_bar.progress(25)
             start_time = time.time()
             bert_result = st.session_state.bert_processor.extract_relationships(
-                text_input, 
-                custom_prompt=analysis_prompt
+                text_input,  # Only input text analyzed
+                custom_prompt=analysis_prompt  # Prompt used for focus, not content
             )
             bert_time = time.time() - start_time
             
@@ -485,6 +485,8 @@ if st.session_state.processed_data and st.session_state.graph:
     
     # Visualization tabs
     viz_tab, data_tab, export_tab = st.tabs(["🔗 Graph Visualization", "📋 Data Analysis", "📤 Export"])
+    
+    st.info("All visualizations show relationships extracted from input text only. Analysis prompts guide extraction but don't appear in graphs.")
     
     with viz_tab:
         try:

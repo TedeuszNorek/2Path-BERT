@@ -36,6 +36,7 @@ class BERTProcessor:
     def clear_cache(self):
         """Clear all cached data for clean measurements"""
         self.processing_time = 0.0
+        self.current_prompt = ""
         # Reset processing time for clean measurements
     
     def extract_relationships(self, text: str, custom_prompt: str = "") -> Dict[str, Any]:
@@ -57,10 +58,9 @@ class BERTProcessor:
         if not text.strip():
             return self._empty_result()
         
-        # Apply custom prompt context if provided
-        if custom_prompt.strip():
-            # Use prompt to focus extraction
-            text = f"{custom_prompt.strip()}\n\n{text}"
+        # Store prompt separately - do not mix with input text
+        # Prompt is used for extraction focus but not processed as content
+        self.current_prompt = custom_prompt.strip() if custom_prompt else ""
         
         # Preprocess text
         sentences = self._preprocess_text(text)
@@ -128,6 +128,11 @@ class BERTProcessor:
     
     def _extract_from_sentence(self, sentence: str) -> List[Dict[str, Any]]:
         """Extract relationships from a single sentence using BERT."""
+        # Skip sentences that are part of the prompt (not input text)
+        if hasattr(self, 'current_prompt') and self.current_prompt:
+            if sentence.strip() in self.current_prompt:
+                return []
+        
         doc = self.nlp(sentence)
         relationships = []
         
