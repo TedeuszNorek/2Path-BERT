@@ -348,9 +348,15 @@ if process_button and text_input:
     # Pipeline description
     pipeline = "BERT" if gnn_model == "None" else f"BERT + {gnn_model}"
     
-    with st.spinner(f"Running {pipeline} pipeline..."):
+    # Visual processing indicator
+    status_placeholder = st.empty()
+    progress_bar = st.progress(0)
+    
+    with st.spinner(f"🧠 Running {pipeline} pipeline..."):
         try:
             # BERT processing
+            status_placeholder.info("🔍 **Step 1/4:** BERT analyzing semantic relationships...")
+            progress_bar.progress(25)
             start_time = time.time()
             bert_result = st.session_state.bert_processor.extract_relationships(
                 text_input, 
@@ -359,6 +365,8 @@ if process_button and text_input:
             bert_time = time.time() - start_time
             
             # Filter relationships
+            status_placeholder.info("⚙️ **Step 2/4:** Filtering relationships by confidence threshold...")
+            progress_bar.progress(50)
             filtered_relationships = [
                 rel for rel in bert_result["relationships"]
                 if rel["confidence"] >= min_confidence
@@ -377,6 +385,8 @@ if process_button and text_input:
                 ]
             
             # Graph construction
+            status_placeholder.info("🕸️ **Step 3/4:** Building knowledge graph structure...")
+            progress_bar.progress(75)
             start_time = time.time()
             graph = graph_utils.build_networkx_graph(filtered_relationships)
             graph_time = time.time() - start_time
@@ -386,6 +396,7 @@ if process_button and text_input:
             gnn_result = None
             
             if gnn_model != "None" and st.session_state.gnn_processor:
+                status_placeholder.info(f"🧬 **Step 4/4:** Enhancing with {gnn_model} neural network...")
                 start_time = time.time()
                 gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
                 gnn_time = time.time() - start_time
@@ -416,6 +427,10 @@ if process_button and text_input:
             }
             st.session_state.graph = graph
             st.session_state.gnn_result = gnn_result
+            
+            # Complete processing
+            progress_bar.progress(100)
+            status_placeholder.success(f"✅ **Processing Complete** - {pipeline} pipeline executed successfully")
             
             # Display results
             st.success(f"✅ Experiment completed - Pipeline: {pipeline}")

@@ -73,7 +73,11 @@ class BERTProcessor:
         
         # Apply temperature scaling to confidence scores
         for rel in all_relationships:
-            rel["confidence"] = min(1.0, rel["confidence"] / self.temperature)
+            if self.temperature > 0:
+                rel["confidence"] = min(1.0, rel["confidence"] / self.temperature)
+            else:
+                # Temperature 0: maximum confidence (no scaling)
+                rel["confidence"] = 1.0
         
         # Calculate statistics
         statistics = self._calculate_statistics(all_relationships)

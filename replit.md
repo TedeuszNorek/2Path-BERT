@@ -89,6 +89,15 @@ This is a scientific research platform that combines BERT-based text processing 
 - Local PyTorch model initialization
 - Error handling for missing dependencies
 
+## Recent Changes
+
+- June 24, 2025: Fixed temperature 0.0 division by zero error
+- June 24, 2025: Added visual processing indicators with progress bar and step-by-step status
+- June 21, 2025: Set default temperature to 0.0 for maximum confidence
+- June 18, 2025: Added individual temperature controls for each model (0.0-1.0 range)
+- June 18, 2025: Enhanced scientific methodology with complete model specifications
+- June 18, 2025: Fixed export functionality to include authentic experimental data
+
 ## Changelog
 
 - June 18, 2025. Initial setup
