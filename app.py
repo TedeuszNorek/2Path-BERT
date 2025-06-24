@@ -12,6 +12,7 @@ from gnn_models import GNNProcessor
 import graph_utils
 import visualization
 import db_simple as db
+from data_manager import DataManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -177,14 +178,19 @@ engineer = st.sidebar.text_input(
     help="For tracking experimental provenance"
 )
 
-# Clear cache for clean experiments
-if st.sidebar.button("🧹 Clear Cache", help="Reset for new experiment"):
-    st.session_state.bert_processor = None
-    st.session_state.gnn_processor = None
-    st.session_state.processed_data = None
-    st.session_state.graph = None
-    st.session_state.gnn_result = None
-    st.sidebar.success("Cache cleared - ready for new experiment")
+# Clear cache for clean experiments (preserves database history)
+if st.sidebar.button("🧹 Clear Session Cache", help="Reset current session data only - preserves database history"):
+    result = DataManager.clear_session_only(preserve_db=True)
+    if result["status"] == "success":
+        st.sidebar.success(result["message"])
+        st.sidebar.info(f"Database protection: {result['database_protected']}")
+    else:
+        st.sidebar.error("Cache clearing failed")
+
+# Data verification button
+if st.sidebar.button("🔍 Verify Data Protection", help="Check data separation status"):
+    verification = DataManager.verify_data_separation()
+    st.sidebar.json(verification)
 
 st.sidebar.divider()
 
@@ -414,7 +420,7 @@ if process_button and text_input:
                 pos = nx.spring_layout(graph, seed=42)
                 nx.set_node_attributes(graph, {node: pos[node] for node in pos}, 'pos')
             
-            # Store results
+            # Store results in session (separate from permanent database)
             st.session_state.processed_data = {
                 "relationships": bert_result["relationships"],
                 "filtered_relationships": filtered_relationships,
@@ -427,6 +433,7 @@ if process_button and text_input:
             }
             st.session_state.graph = graph
             st.session_state.gnn_result = gnn_result
+            st.session_state.current_text = text_input  # Store for potential saving
             
             # Complete processing
             progress_bar.progress(100)
@@ -447,13 +454,13 @@ if process_button and text_input:
             st.error(f"❌ Experiment failed: {str(e)}")
             logging.error(f"Processing error: {e}", exc_info=True)
 
-# Save experiment
+# Save experiment to permanent database (separate from session cache)
 if save_button and st.session_state.processed_data:
-    with st.spinner("Saving experiment to database..."):
+    with st.spinner("Saving experiment to permanent database..."):
         try:
             data = st.session_state.processed_data
             analysis_id = db.save_analysis(
-                text=st.session_state.current_text,
+                text=st.session_state.get('current_text', text_input),
                 relationships=data["filtered_relationships"],
                 title=f"Experiment_{st.session_state.experiment_id}",
                 model_type=base_model.lower(),
@@ -465,7 +472,8 @@ if save_button and st.session_state.processed_data:
                 processing_time_graph=data["graph_time"]
             )
             
-            st.success(f"✅ Experiment saved with ID: {analysis_id}")
+            st.success(f"✅ Experiment saved to permanent database with ID: {analysis_id}")
+            st.info("💾 This data is preserved independently from session cache and won't be lost when clearing cache")
             
         except Exception as e:
             st.error(f"❌ Save failed: {str(e)}")
@@ -587,13 +595,24 @@ if st.session_state.processed_data and st.session_state.graph:
                 except Exception as e:
                     st.error(f"Export failed: {str(e)}")
 
-# Database status
+# Database status and data protection
 st.sidebar.divider()
 st.sidebar.subheader("📊 Database Status")
 try:
     analysis_count = db.get_analysis_count()
     relationship_count = db.get_relationship_count()
-    st.sidebar.metric("Experiments", analysis_count)
-    st.sidebar.metric("Relationships", relationship_count)
+    st.sidebar.metric("Saved Experiments", analysis_count)
+    st.sidebar.metric("Saved Relationships", relationship_count)
+    st.sidebar.info("💾 All saved data is permanently protected from cache clearing")
 except:
     st.sidebar.error("Database connection error")
+
+# Data separation notice
+st.sidebar.markdown("""
+**Data Path Separation:**
+- 🔄 **Session Cache**: Temporary processing data (cleared with cache button)
+- 💾 **Database History**: Permanent experimental data (never cleared)
+- 📤 **Export Data**: Generated from permanent database only
+
+**Protection Guarantee**: Historical experiments remain safe regardless of cache operations.
+""")

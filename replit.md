@@ -91,6 +91,8 @@ This is a scientific research platform that combines BERT-based text processing 
 
 ## Recent Changes
 
+- June 24, 2025: Implemented data path separation with protected database history
+- June 24, 2025: Added DataManager class for secure session/database separation
 - June 24, 2025: Fixed temperature 0.0 division by zero error
 - June 24, 2025: Added visual processing indicators with progress bar and step-by-step status
 - June 21, 2025: Set default temperature to 0.0 for maximum confidence
