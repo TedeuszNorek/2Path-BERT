@@ -117,7 +117,7 @@ bert_temperature = st.sidebar.slider(
     "BERT Baseline Temperature",
     min_value=0.0,
     max_value=1.0,
-    value=0.5,
+    value=0.0,
     step=0.05,
     help="Temperature for BERT-only processing"
 )
@@ -127,7 +127,7 @@ rgcn_temperature = st.sidebar.slider(
     "RGCN Temperature",
     min_value=0.0,
     max_value=1.0,
-    value=0.5,
+    value=0.0,
     step=0.05,
     help="Temperature for BERT+RGCN processing"
 )
@@ -136,7 +136,7 @@ compgcn_temperature = st.sidebar.slider(
     "CompGCN Temperature", 
     min_value=0.0,
     max_value=1.0,
-    value=0.5,
+    value=0.0,
     step=0.05,
     help="Temperature for BERT+CompGCN processing"
 )
@@ -145,7 +145,7 @@ rgat_temperature = st.sidebar.slider(
     "RGAT Temperature",
     min_value=0.0,
     max_value=1.0,
-    value=0.5,
+    value=0.0,
     step=0.05,
     help="Temperature for BERT+RGAT processing"
 )
