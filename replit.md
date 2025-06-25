@@ -107,4 +107,4 @@ This is a scientific research platform that combines BERT-based text processing 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
-Interface preference: Simple layout with prompt field and text analysis field only.
+Interface preference: Single text analysis field only, no optional prompt field.

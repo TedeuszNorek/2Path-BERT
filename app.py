@@ -323,21 +323,16 @@ st.divider()
 # Input Interface
 st.subheader("📝 Input")
 
-# Analysis prompt
-analysis_prompt = st.text_area(
-    "Prompt",
-    height=100,
-    placeholder="e.g., 'Focus on causal relationships' or 'Extract temporal sequences'",
-    help="Optional focus for extraction"
-)
-
 # Text to analyze
 text_input = st.text_area(
     "Text to analyze",
-    height=200,
+    height=250,
     placeholder="Paste your text here for semantic relationship extraction...",
     help="Text will be processed for relationship extraction"
 )
+
+# Set empty prompt since we removed the field
+analysis_prompt = ""
 
 # Input validation
 input_valid = text_input.strip() and len(text_input.strip()) > 20
@@ -526,7 +521,7 @@ if st.session_state.processed_data and st.session_state.graph:
     # Visualization tabs
     viz_tab, data_tab, export_tab = st.tabs(["🔗 Graph Visualization", "📋 Data Analysis", "📤 Export"])
     
-    st.info("All graphs show relationships from input text only. Prompts guide extraction but don't appear in results.")
+    st.info("All graphs show relationships extracted from your input text.")
     
     with viz_tab:
         try:
