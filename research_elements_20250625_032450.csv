@@ -1,0 +1,79 @@
+Label;Type;Tags;Description;Trial ID;Base Model;Model Configuration;Analysis prompt;Text;Temperature;[Engineer];Timestamp
+replication;;;;18;BERT;RGAT;Test experiment 2 with rgat;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:34
+DNA polymerase;;;;18;BERT;RGAT;Test experiment 2 with rgat;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:34
+new DNA strands;;;;18;BERT;RGAT;Test experiment 2 with rgat;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:34
+Mitochondria;;;;19;BERT;RGCN;Test experiment 3 with rgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+ATP;;;;19;BERT;RGCN;Test experiment 3 with rgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+cellular respiration processes;;;;19;BERT;RGCN;Test experiment 3 with rgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+Mitochondria;;;;20;BERT;COMPGCN;Test experiment 3 with compgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+ATP;;;;20;BERT;COMPGCN;Test experiment 3 with compgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+cellular respiration processes;;;;20;BERT;COMPGCN;Test experiment 3 with compgcn;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+Mitochondria;;;;21;BERT;RGAT;Test experiment 3 with rgat;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+ATP;;;;21;BERT;RGAT;Test experiment 3 with rgat;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+cellular respiration processes;;;;21;BERT;RGAT;Test experiment 3 with rgat;Mitochondria produce ATP through cellular respiration processes.;0.5;;2025-06-25 03:24:34
+water;;;;13;BERT;RGCN;Test experiment 1 with rgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+hydrogen peroxide;;;;13;BERT;RGCN;Test experiment 1 with rgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+The enzyme catalase;;;;13;BERT;RGCN;Test experiment 1 with rgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+oxygen;;;;13;BERT;RGCN;Test experiment 1 with rgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+water;;;;14;BERT;COMPGCN;Test experiment 1 with compgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+hydrogen peroxide;;;;14;BERT;COMPGCN;Test experiment 1 with compgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+The enzyme catalase;;;;14;BERT;COMPGCN;Test experiment 1 with compgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+oxygen;;;;14;BERT;COMPGCN;Test experiment 1 with compgcn;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+water;;;;15;BERT;RGAT;Test experiment 1 with rgat;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+hydrogen peroxide;;;;15;BERT;RGAT;Test experiment 1 with rgat;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+The enzyme catalase;;;;15;BERT;RGAT;Test experiment 1 with rgat;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+oxygen;;;;15;BERT;RGAT;Test experiment 1 with rgat;The enzyme catalase breaks down hydrogen peroxide into water and oxygen.;0.5;;2025-06-25 03:24:33
+replication;;;;16;BERT;RGCN;Test experiment 2 with rgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+DNA polymerase;;;;16;BERT;RGCN;Test experiment 2 with rgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+new DNA strands;;;;16;BERT;RGCN;Test experiment 2 with rgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+replication;;;;17;BERT;COMPGCN;Test experiment 2 with compgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+DNA polymerase;;;;17;BERT;COMPGCN;Test experiment 2 with compgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+new DNA strands;;;;17;BERT;COMPGCN;Test experiment 2 with compgcn;DNA polymerase synthesizes new DNA strands during replication.;0.5;;2025-06-25 03:24:33
+context variations;;;;12;BERT;RGAT;RGAT with broad attention scope;Attention weights reveal semantic significance. Dynamic focusing adapts to context variations.;3.0;;2025-06-10T21:20:25.308619
+Attention weights;;;;12;BERT;RGAT;RGAT with broad attention scope;Attention weights reveal semantic significance. Dynamic focusing adapts to context variations.;3.0;;2025-06-10T21:20:25.308619
+semantic significance;;;;12;BERT;RGAT;RGAT with broad attention scope;Attention weights reveal semantic significance. Dynamic focusing adapts to context variations.;3.0;;2025-06-10T21:20:25.308619
+Dynamic focusing;;;;12;BERT;RGAT;RGAT with broad attention scope;Attention weights reveal semantic significance. Dynamic focusing adapts to context variations.;3.0;;2025-06-10T21:20:25.308619
+diverse patterns;;;;11;BERT;RGAT;RGAT with standard attention;Graph attention networks learn relationship importance. Multi-head mechanisms capture diverse patterns.;1.0;;2025-06-10T21:20:25.308612
+Multi-head mechanisms;;;;11;BERT;RGAT;RGAT with standard attention;Graph attention networks learn relationship importance. Multi-head mechanisms capture diverse patterns.;1.0;;2025-06-10T21:20:25.308612
+Graph attention networks;;;;11;BERT;RGAT;RGAT with standard attention;Graph attention networks learn relationship importance. Multi-head mechanisms capture diverse patterns.;1.0;;2025-06-10T21:20:25.308612
+relationship importance;;;;11;BERT;RGAT;RGAT with standard attention;Graph attention networks learn relationship importance. Multi-head mechanisms capture diverse patterns.;1.0;;2025-06-10T21:20:25.308612
+Attention mechanisms;;;;10;BERT;RGAT;RGAT with focused attention;Attention mechanisms prioritize relevant connections. Weighted aggregation emphasizes important relationships.;0.1;;2025-06-10T21:20:25.308605
+relevant connections;;;;10;BERT;RGAT;RGAT with focused attention;Attention mechanisms prioritize relevant connections. Weighted aggregation emphasizes important relationships.;0.1;;2025-06-10T21:20:25.308605
+Weighted aggregation;;;;10;BERT;RGAT;RGAT with focused attention;Attention mechanisms prioritize relevant connections. Weighted aggregation emphasizes important relationships.;0.1;;2025-06-10T21:20:25.308605
+important relationships;;;;10;BERT;RGAT;RGAT with focused attention;Attention mechanisms prioritize relevant connections. Weighted aggregation emphasizes important relationships.;0.1;;2025-06-10T21:20:25.308605
+Mathematical functions;;;;9;BERT;COMPGCN;CompGCN with creative exploration;Compositional operators transform semantic spaces. Mathematical functions encode relational patterns.;3.0;;2025-06-10T21:20:25.308597
+semantic spaces;;;;9;BERT;COMPGCN;CompGCN with creative exploration;Compositional operators transform semantic spaces. Mathematical functions encode relational patterns.;3.0;;2025-06-10T21:20:25.308597
+relational patterns;;;;9;BERT;COMPGCN;CompGCN with creative exploration;Compositional operators transform semantic spaces. Mathematical functions encode relational patterns.;3.0;;2025-06-10T21:20:25.308597
+Compositional operators;;;;9;BERT;COMPGCN;CompGCN with creative exploration;Compositional operators transform semantic spaces. Mathematical functions encode relational patterns.;3.0;;2025-06-10T21:20:25.308597
+Entity-relation interactions;;;;8;BERT;COMPGCN;CompGCN with balanced approach;Entity-relation interactions form compositional structures. Unified embedding spaces capture dependencies.;1.0;;2025-06-10T21:20:25.308589
+compositional structures;;;;8;BERT;COMPGCN;CompGCN with balanced approach;Entity-relation interactions form compositional structures. Unified embedding spaces capture dependencies.;1.0;;2025-06-10T21:20:25.308589
+dependencies;;;;8;BERT;COMPGCN;CompGCN with balanced approach;Entity-relation interactions form compositional structures. Unified embedding spaces capture dependencies.;1.0;;2025-06-10T21:20:25.308589
+Unified embedding spaces;;;;8;BERT;COMPGCN;CompGCN with balanced approach;Entity-relation interactions form compositional structures. Unified embedding spaces capture dependencies.;1.0;;2025-06-10T21:20:25.308589
+entity and relation embeddings;;;;7;BERT;COMPGCN;CompGCN with precise extraction;Composition functions merge entity and relation embeddings. Joint representations enable unified processing.;0.1;;2025-06-10T21:20:25.308578
+Joint representations;;;;7;BERT;COMPGCN;CompGCN with precise extraction;Composition functions merge entity and relation embeddings. Joint representations enable unified processing.;0.1;;2025-06-10T21:20:25.308578
+Composition functions;;;;7;BERT;COMPGCN;CompGCN with precise extraction;Composition functions merge entity and relation embeddings. Joint representations enable unified processing.;0.1;;2025-06-10T21:20:25.308578
+unified processing;;;;7;BERT;COMPGCN;CompGCN with precise extraction;Composition functions merge entity and relation embeddings. Joint representations enable unified processing.;0.1;;2025-06-10T21:20:25.308578
+Knowledge graphs;;;;6;BERT;RGCN;RGCN with exploratory temperature;Knowledge graphs enable structured reasoning. Relation-specific parameters capture semantic nuances.;3.0;;2025-06-10T21:20:25.308562
+structured reasoning;;;;6;BERT;RGCN;RGCN with exploratory temperature;Knowledge graphs enable structured reasoning. Relation-specific parameters capture semantic nuances.;3.0;;2025-06-10T21:20:25.308562
+Relation-specific parameters;;;;6;BERT;RGCN;RGCN with exploratory temperature;Knowledge graphs enable structured reasoning. Relation-specific parameters capture semantic nuances.;3.0;;2025-06-10T21:20:25.308562
+semantic nuances;;;;6;BERT;RGCN;RGCN with exploratory temperature;Knowledge graphs enable structured reasoning. Relation-specific parameters capture semantic nuances.;3.0;;2025-06-10T21:20:25.308562
+specialized architectures;;;;5;BERT;RGCN;RGCN with standard temperature;Relational convolutions enhance semantic understanding. Multi-relational graphs benefit from specialized architectures.;1.0;;2025-06-10T21:20:25.308297
+Relational convolutions;;;;5;BERT;RGCN;RGCN with standard temperature;Relational convolutions enhance semantic understanding. Multi-relational graphs benefit from specialized architectures.;1.0;;2025-06-10T21:20:25.308297
+semantic understanding;;;;5;BERT;RGCN;RGCN with standard temperature;Relational convolutions enhance semantic understanding. Multi-relational graphs benefit from specialized architectures.;1.0;;2025-06-10T21:20:25.308297
+Multi-relational graphs;;;;5;BERT;RGCN;RGCN with standard temperature;Relational convolutions enhance semantic understanding. Multi-relational graphs benefit from specialized architectures.;1.0;;2025-06-10T21:20:25.308297
+heterogeneous relationship types;;;;4;BERT;RGCN;RGCN with conservative temperature;Graph neural networks process relational data structures. RGCN models handle heterogeneous relationship types effectively.;0.1;;2025-06-10T21:20:25.308291
+Graph neural networks;;;;4;BERT;RGCN;RGCN with conservative temperature;Graph neural networks process relational data structures. RGCN models handle heterogeneous relationship types effectively.;0.1;;2025-06-10T21:20:25.308291
+relational data structures;;;;4;BERT;RGCN;RGCN with conservative temperature;Graph neural networks process relational data structures. RGCN models handle heterogeneous relationship types effectively.;0.1;;2025-06-10T21:20:25.308291
+RGCN models;;;;4;BERT;RGCN;RGCN with conservative temperature;Graph neural networks process relational data structures. RGCN models handle heterogeneous relationship types effectively.;0.1;;2025-06-10T21:20:25.308291
+artificial intelligence applications;;;;3;BERT;None;Maximum temperature for diverse relationships;Academic studies explored artificial intelligence applications. Neural systems exhibited complex behavioral patterns.;3.0;;2025-06-10T21:20:25.308283
+Neural systems;;;;3;BERT;None;Maximum temperature for diverse relationships;Academic studies explored artificial intelligence applications. Neural systems exhibited complex behavioral patterns.;3.0;;2025-06-10T21:20:25.308283
+Academic studies;;;;3;BERT;None;Maximum temperature for diverse relationships;Academic studies explored artificial intelligence applications. Neural systems exhibited complex behavioral patterns.;3.0;;2025-06-10T21:20:25.308283
+complex behavioral patterns;;;;3;BERT;None;Maximum temperature for diverse relationships;Academic studies explored artificial intelligence applications. Neural systems exhibited complex behavioral patterns.;3.0;;2025-06-10T21:20:25.308283
+Researchers;;;;2;BERT;None;Standard temperature for balanced extraction;Researchers analyzed computational methods for data processing. Deep learning algorithms showed consistent results.;1.0;;2025-06-10T21:20:25.308271
+Deep learning algorithms;;;;2;BERT;None;Standard temperature for balanced extraction;Researchers analyzed computational methods for data processing. Deep learning algorithms showed consistent results.;1.0;;2025-06-10T21:20:25.308271
+consistent results;;;;2;BERT;None;Standard temperature for balanced extraction;Researchers analyzed computational methods for data processing. Deep learning algorithms showed consistent results.;1.0;;2025-06-10T21:20:25.308271
+computational methods;;;;2;BERT;None;Standard temperature for balanced extraction;Researchers analyzed computational methods for data processing. Deep learning algorithms showed consistent results.;1.0;;2025-06-10T21:20:25.308271
+exceptional performance;;;;1;BERT;None;Minimal temperature for maximum confidence;Scientists conducted rigorous experiments on neural network architectures. Machine learning models demonstrated exceptional performance.;0.1;;2025-06-10T21:20:25.308186
+rigorous experiments;;;;1;BERT;None;Minimal temperature for maximum confidence;Scientists conducted rigorous experiments on neural network architectures. Machine learning models demonstrated exceptional performance.;0.1;;2025-06-10T21:20:25.308186
+Machine learning models;;;;1;BERT;None;Minimal temperature for maximum confidence;Scientists conducted rigorous experiments on neural network architectures. Machine learning models demonstrated exceptional performance.;0.1;;2025-06-10T21:20:25.308186
+Scientists;;;;1;BERT;None;Minimal temperature for maximum confidence;Scientists conducted rigorous experiments on neural network architectures. Machine learning models demonstrated exceptional performance.;0.1;;2025-06-10T21:20:25.308186
