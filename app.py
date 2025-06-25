@@ -320,40 +320,30 @@ with col2:
 
 st.divider()
 
-# Dual Input Interface - Academic Standard Layout
-st.subheader("📝 Research Input Interface")
+# Input Interface
+st.subheader("📝 Input")
 
-# Create two columns for side-by-side text inputs
-input_col1, input_col2 = st.columns([1, 1])
+# Analysis prompt
+analysis_prompt = st.text_area(
+    "Prompt",
+    height=100,
+    placeholder="e.g., 'Focus on causal relationships' or 'Extract temporal sequences'",
+    help="Optional focus for extraction"
+)
 
-with input_col1:
-    st.markdown("**Primary Research Text**")
-    text_input = st.text_area(
-        "Text to analyze:",
-        height=200,
-        placeholder="Paste your primary research text here for semantic relationship extraction...",
-        key="primary_text_input",
-        help="This text will be processed for relationship extraction and graphical analysis"
-    )
+# Text to analyze
+text_input = st.text_area(
+    "Text to analyze",
+    height=200,
+    placeholder="Paste your text here for semantic relationship extraction...",
+    help="Text will be processed for relationship extraction"
+)
 
-with input_col2:
-    st.markdown("**Analysis Focus Directive**")
-    analysis_prompt = st.text_area(
-        "Optional extraction focus:",
-        height=200,
-        placeholder="e.g., 'Focus on causal relationships between variables'\n'Extract temporal sequences'\n'Identify methodological connections'",
-        key="analysis_focus_input",
-        help="Guides extraction focus but does not appear in results - used for scientific precision"
-    )
-
-# Academic Standards Notice
-st.info("📚 **Academic Compliance**: Input text and analysis focus are processed separately to maintain research integrity. Only relationships from primary text appear in results.")
-
-# Input validation for academic standards
+# Input validation
 input_valid = text_input.strip() and len(text_input.strip()) > 20
 
 if text_input.strip() and not input_valid:
-    st.warning("⚠️ **Academic Standard**: Minimum 20 characters required for statistically meaningful analysis")
+    st.warning("Minimum 20 characters required for meaningful analysis")
 
 # Process button
 col1, col2 = st.columns([1, 1])
@@ -536,7 +526,7 @@ if st.session_state.processed_data and st.session_state.graph:
     # Visualization tabs
     viz_tab, data_tab, export_tab = st.tabs(["🔗 Graph Visualization", "📋 Data Analysis", "📤 Export"])
     
-    st.info("All visualizations show relationships extracted from input text only. Analysis prompts guide extraction but don't appear in graphs.")
+    st.info("All graphs show relationships from input text only. Prompts guide extraction but don't appear in results.")
     
     with viz_tab:
         try:
