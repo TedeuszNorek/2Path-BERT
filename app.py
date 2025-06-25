@@ -290,6 +290,12 @@ with col1:
     - Parameters: ~110M, pre-trained on English web text
     - Implementation: Universal Dependencies + NER
     
+    **T5 Comparison Architecture**
+    - Model: T5-small/base (Encoder-Decoder)
+    - Architecture: 6/12 layers, 512/768 hidden units
+    - Parameters: 60M/220M, text-to-text generation
+    - Implementation: Conditional relationship generation
+    
     **RGCN (Schlichtkrull et al., 2018)**
     - Architecture: 2 layers, 128→64→32 dimensions
     - Parameters: Basis decomposition with 30 basis matrices
@@ -314,13 +320,40 @@ with col2:
 
 st.divider()
 
-# Text input
-text_input = st.text_area(
-    "Text to Analyze",
-    height=150,
-    placeholder="Enter scientific text for semantic relationship extraction...",
-    help="Input text for experimental analysis"
-)
+# Dual Input Interface - Academic Standard Layout
+st.subheader("📝 Research Input Interface")
+
+# Create two columns for side-by-side text inputs
+input_col1, input_col2 = st.columns([1, 1])
+
+with input_col1:
+    st.markdown("**Primary Research Text**")
+    text_input = st.text_area(
+        "Text to analyze:",
+        height=200,
+        placeholder="Paste your primary research text here for semantic relationship extraction...",
+        key="primary_text_input",
+        help="This text will be processed for relationship extraction and graphical analysis"
+    )
+
+with input_col2:
+    st.markdown("**Analysis Focus Directive**")
+    analysis_prompt = st.text_area(
+        "Optional extraction focus:",
+        height=200,
+        placeholder="e.g., 'Focus on causal relationships between variables'\n'Extract temporal sequences'\n'Identify methodological connections'",
+        key="analysis_focus_input",
+        help="Guides extraction focus but does not appear in results - used for scientific precision"
+    )
+
+# Academic Standards Notice
+st.info("📚 **Academic Compliance**: Input text and analysis focus are processed separately to maintain research integrity. Only relationships from primary text appear in results.")
+
+# Input validation for academic standards
+input_valid = text_input.strip() and len(text_input.strip()) > 20
+
+if text_input.strip() and not input_valid:
+    st.warning("⚠️ **Academic Standard**: Minimum 20 characters required for statistically meaningful analysis")
 
 # Process button
 col1, col2 = st.columns([1, 1])
