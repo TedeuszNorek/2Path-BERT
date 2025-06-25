@@ -108,3 +108,4 @@ This is a scientific research platform that combines BERT-based text processing 
 
 Preferred communication style: Simple, everyday language.
 Interface preference: Single text analysis field only, no optional prompt field.
+Quality preference: Replace confusing confidence scores with simple quality indicators (strong/medium/weak).
