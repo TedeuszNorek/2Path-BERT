@@ -91,6 +91,10 @@ This is a scientific research platform that combines BERT-based text processing 
 
 ## Recent Changes
 
+- June 25, 2025: All export options thoroughly tested and validated working correctly
+- June 25, 2025: Fixed critical "bert_result" undefined errors across all GNN models
+- June 25, 2025: Replaced confusing confidence scores with clear quality indicators (Strong/Medium/Weak)
+- June 25, 2025: Added openpyxl dependency for Excel export functionality
 - June 24, 2025: Implemented data path separation with protected database history
 - June 24, 2025: Added DataManager class for secure session/database separation
 - June 24, 2025: Fixed temperature 0.0 division by zero error
