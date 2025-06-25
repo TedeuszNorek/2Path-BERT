@@ -195,13 +195,10 @@ if st.sidebar.button("🔍 Verify Data Protection", help="Check data separation 
 st.sidebar.divider()
 
 # Processing controls
-min_confidence = st.sidebar.slider(
-    "Minimum Confidence Threshold",
-    min_value=0.0,
-    max_value=1.0,
-    value=0.3,
-    step=0.05,
-    help="Filter relationships below this confidence"
+show_weak_relationships = st.sidebar.checkbox(
+    "Include Weak Relationships", 
+    value=True,
+    help="Show uncertain or indirect relationships"
 )
 
 show_negative = st.sidebar.checkbox("Include Negative Relationships", value=True)

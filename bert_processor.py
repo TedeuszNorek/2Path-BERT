@@ -288,27 +288,12 @@ class BERTProcessor:
         return None
     
     def _calculate_svo_confidence(self, doc, verb_token, subject: str, obj: str) -> float:
-        """Calculate confidence for SVO relationship based on linguistic features."""
-        confidence = 0.8  # Base confidence
-        
-        # Boost confidence for clear dependency structure
-        if verb_token.dep_ == "ROOT":
-            confidence += 0.1
-        
-        # Check for negation
-        for child in verb_token.children:
-            if child.dep_ == "neg":
-                confidence -= 0.2
-                break
-        
-        # Check sentence length (shorter sentences often clearer)
-        sentence_length = len([t for t in doc if not t.is_space])
-        if sentence_length < 15:
-            confidence += 0.1
-        elif sentence_length > 30:
-            confidence -= 0.1
-        
-        return max(0.1, min(1.0, confidence))
+        """Simple quality score: 1.0 for clear relationships, 0.5 for weak ones."""
+        # Strong relationships: ROOT verbs with clear subjects/objects
+        if verb_token.dep_ == "ROOT" and len(subject.split()) >= 1 and len(obj.split()) >= 1:
+            return 1.0
+        else:
+            return 0.5
     
     def _classify_polarity(self, sentence: str, subject: str, predicate: str, obj: str) -> str:
         """Classify relationship polarity using BERT features."""
