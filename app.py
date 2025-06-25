@@ -403,11 +403,11 @@ if process_button and text_input:
                 base_time = time.time() - start_time
             
             # Filter relationships
-            status_placeholder.info("⚙️ **Step 2/4:** Filtering relationships by confidence threshold...")
+            status_placeholder.info("⚙️ **Step 2/4:** Processing relationships...")
             progress_bar.progress(50)
             filtered_relationships = [
-                rel for rel in bert_result["relationships"]
-                if rel["confidence"] >= min_confidence
+                rel for rel in base_result["relationships"]
+                if rel.get("quality", "weak") != "weak" or show_weak_relationships
             ]
             
             if not show_negative:
@@ -436,16 +436,23 @@ if process_button and text_input:
             if gnn_model != "None" and st.session_state.gnn_processor:
                 status_placeholder.info(f"🧬 **Step 4/4:** Enhancing with {gnn_model} neural network...")
                 start_time = time.time()
-                gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
-                gnn_time = time.time() - start_time
-                
-                # Apply GNN layout
-                if gnn_result and len(gnn_result.get("embeddings", [])) > 0:
-                    graph = graph_utils.apply_rgcn_layout(
-                        graph,
-                        gnn_result["embeddings"],
-                        gnn_result["entity_to_idx"]
-                    )
+                try:
+                    gnn_result = st.session_state.gnn_processor.process_relationships(filtered_relationships)
+                    gnn_time = time.time() - start_time
+                    
+                    # Apply GNN layout if successful
+                    if gnn_result and not gnn_result.get("error") and len(gnn_result.get("embeddings", [])) > 0:
+                        graph = graph_utils.apply_rgcn_layout(
+                            graph,
+                            gnn_result["embeddings"],
+                            gnn_result["entity_to_idx"]
+                        )
+                    elif gnn_result and gnn_result.get("error"):
+                        st.warning(f"GNN processing failed: {gnn_result['error']}")
+                except Exception as e:
+                    st.error(f"GNN processing error: {str(e)}")
+                    gnn_result = None
+                    gnn_time = time.time() - start_time
             else:
                 # BERT-only: use spring layout
                 import networkx as nx

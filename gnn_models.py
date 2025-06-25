@@ -298,6 +298,20 @@ class GNNProcessor:
             if predicate:
                 relations.add(predicate)
         
+        # Ensure minimum entities and relations for GNN processing
+        if len(entities) < 2:
+            return {
+                "embeddings": np.array([]),
+                "entity_to_idx": {},
+                "relation_to_idx": {},
+                "processing_time": 0.0,
+                "model_type": self.model_type,
+                "error": "Insufficient entities for GNN processing"
+            }
+        
+        if len(relations) == 0:
+            relations.add("default_relation")
+        
         entities = list(entities)
         relations = list(relations)
         
@@ -334,6 +348,14 @@ class GNNProcessor:
         self.processing_time = time.time() - start_time
         
         self.logger.info(f"{self.model_type.upper()} processing completed in {self.processing_time:.4f}s")
+        
+        return {
+            "embeddings": embeddings.detach().numpy(),
+            "entity_to_idx": self.entity_to_idx,
+            "relation_to_idx": self.relation_to_idx,
+            "processing_time": self.processing_time,
+            "model_type": self.model_type
+        }
         
         return {
             "embeddings": embeddings.numpy(),
@@ -453,7 +475,9 @@ class GNNProcessor:
             subject = rel.get("subject", "").strip()
             predicate = rel.get("predicate", "").strip()
             obj = rel.get("object", "").strip()
-            confidence = rel.get("confidence", 1.0)
+            # Get quality score for edge weight
+            quality = rel.get("quality", "weak")
+            confidence = 1.0 if quality == "strong" else 0.7 if quality == "medium" else 0.5
             
             if subject in self.entity_to_idx and obj in self.entity_to_idx and predicate in self.relation_to_idx:
                 subj_idx = self.entity_to_idx[subject]
