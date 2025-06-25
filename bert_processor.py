@@ -355,17 +355,16 @@ class BERTProcessor:
         # Extraction method distribution
         method_dist = Counter(rel.get("extraction_method", "unknown") for rel in relationships)
         
-        # Confidence statistics
-        confidences = [rel["confidence"] for rel in relationships]
+        # Quality statistics
+        qualities = [rel.get("quality", "weak") for rel in relationships]
+        quality_dist = Counter(qualities)
         
         return {
             "total_relationships": len(relationships),
             "polarity_distribution": dict(polarity_dist),
             "directness_distribution": dict(directness_dist),
             "method_distribution": dict(method_dist),
-            "avg_confidence": sum(confidences) / len(confidences),
-            "min_confidence": min(confidences),
-            "max_confidence": max(confidences)
+            "quality_distribution": dict(quality_dist)
         }
     
     def get_performance_metrics(self) -> Dict[str, Any]:
