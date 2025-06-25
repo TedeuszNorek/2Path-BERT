@@ -289,6 +289,10 @@ class BERTProcessor:
     
     def _calculate_svo_confidence(self, doc, verb_token, subject: str, obj: str) -> float:
         """Simple quality score: 1.0 for clear relationships, 0.5 for weak ones."""
+        # Prevent division by zero - ensure we always have valid subjects and objects
+        if not subject or not obj:
+            return 0.5
+            
         # Strong relationships: ROOT verbs with clear subjects/objects
         if verb_token.dep_ == "ROOT" and len(subject.split()) >= 1 and len(obj.split()) >= 1:
             return 1.0

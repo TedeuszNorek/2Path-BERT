@@ -461,10 +461,10 @@ if process_button and text_input:
             
             # Store results in session (separate from permanent database)
             st.session_state.processed_data = {
-                "relationships": bert_result["relationships"],
+                "relationships": base_result["relationships"],
                 "filtered_relationships": filtered_relationships,
-                "statistics": bert_result.get("statistics", {}),
-                "bert_time": bert_time,
+                "statistics": base_result.get("statistics", {}),
+                "base_time": base_time,
                 "graph_time": graph_time,
                 "gnn_time": gnn_time,
                 "pipeline": pipeline,
@@ -483,7 +483,7 @@ if process_button and text_input:
             
             # Metrics
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("BERT Time", f"{bert_time:.3f}s")
+            col1.metric(f"{base_model} Time", f"{base_time:.3f}s")
             col2.metric("Graph Time", f"{graph_time:.3f}s")
             if gnn_model != "None":
                 col3.metric(f"{gnn_model} Time", f"{gnn_time:.3f}s")

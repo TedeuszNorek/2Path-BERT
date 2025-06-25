@@ -334,9 +334,12 @@ class GNNProcessor:
         # Create adjacency matrices
         adjacency_matrices = self._create_adjacency_matrices(relationships)
         
-        # Initialize node features
+        # Initialize node features (prevent division by zero)
         num_entities = len(entities)
-        node_features = torch.randn(num_entities, self.embedding_dim) / self.temperature
+        if self.temperature > 0:
+            node_features = torch.randn(num_entities, self.embedding_dim) / self.temperature
+        else:
+            node_features = torch.randn(num_entities, self.embedding_dim)
         
         # Forward pass through the model
         with torch.no_grad():
@@ -356,14 +359,6 @@ class GNNProcessor:
             "processing_time": self.processing_time,
             "model_type": self.model_type
         }
-        
-        return {
-            "embeddings": embeddings.numpy(),
-            "entity_to_idx": self.entity_to_idx.copy(),
-            "relation_to_idx": self.relation_to_idx.copy(),
-            "processing_time": self.processing_time,
-            "model_type": self.model_type,
-            "num_entities": len(entities),
             "num_relations": len(relations)
         }
     
@@ -484,8 +479,11 @@ class GNNProcessor:
                 obj_idx = self.entity_to_idx[obj]
                 rel_idx = self.relation_to_idx[predicate]
                 
-                # Apply temperature scaling to confidence
-                scaled_confidence = confidence / self.temperature
+                # Apply temperature scaling to confidence (prevent division by zero)
+                if self.temperature > 0:
+                    scaled_confidence = confidence / self.temperature
+                else:
+                    scaled_confidence = confidence
                 adjacency_matrices[rel_idx][subj_idx, obj_idx] = scaled_confidence
         
         return adjacency_matrices
