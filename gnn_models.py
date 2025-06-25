@@ -359,8 +359,6 @@ class GNNProcessor:
             "processing_time": self.processing_time,
             "model_type": self.model_type
         }
-            "num_relations": len(relations)
-        }
     
     def _build_mappings(self, entities: List[str], relations: List[str]) -> None:
         """Build entity and relation mappings"""

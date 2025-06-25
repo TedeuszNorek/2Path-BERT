@@ -71,13 +71,8 @@ class BERTProcessor:
             relationships = self._extract_from_sentence(sentence)
             all_relationships.extend(relationships)
         
-        # Apply temperature scaling to confidence scores
-        for rel in all_relationships:
-            if self.temperature > 0:
-                rel["confidence"] = min(1.0, rel["confidence"] / self.temperature)
-            else:
-                # Temperature 0: maximum confidence (no scaling)
-                rel["confidence"] = 1.0
+        # Quality indicators are now used instead of confidence scores
+        # No temperature scaling needed for quality system
         
         # Calculate statistics
         statistics = self._calculate_statistics(all_relationships)
