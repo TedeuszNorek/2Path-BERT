@@ -371,9 +371,16 @@ if process_button and text_input:
     timestamp = datetime.datetime.now()
     st.session_state.experiment_id = int(timestamp.timestamp())
     
-    # Initialize processors
-    if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
-        st.session_state.bert_processor = BERTProcessor(temperature=temperature)
+    # Initialize processors based on selected base model
+    if base_model == "BERT":
+        if st.session_state.bert_processor is None or st.session_state.bert_processor.temperature != temperature:
+            st.session_state.bert_processor = BERTProcessor(temperature=temperature)
+    else:  # T5
+        if T5_AVAILABLE:
+            if st.session_state.t5_processor is None or st.session_state.t5_processor.temperature != temperature:
+                st.session_state.t5_processor = T5Processor(temperature=temperature)
+        else:
+            st.error("T5 processor not available. Please install transformers library.")
     
     if gnn_model != "None":
         if st.session_state.gnn_processor is None or st.session_state.gnn_processor.model_type != gnn_model.lower():
@@ -384,8 +391,8 @@ if process_button and text_input:
     else:
         st.session_state.gnn_processor = None
     
-    # Pipeline description
-    pipeline = "BERT" if gnn_model == "None" else f"BERT + {gnn_model}"
+    # Pipeline description for academic documentation
+    pipeline = base_model if gnn_model == "None" else f"{base_model} + {gnn_model}"
     
     # Visual processing indicator
     status_placeholder = st.empty()
@@ -393,15 +400,25 @@ if process_button and text_input:
     
     with st.spinner(f"🧠 Running {pipeline} pipeline..."):
         try:
-            # BERT processing - analyze input text only
-            status_placeholder.info("🔍 **Step 1/4:** BERT analyzing semantic relationships from input text...")
-            progress_bar.progress(25)
-            start_time = time.time()
-            bert_result = st.session_state.bert_processor.extract_relationships(
-                text_input,  # Only input text analyzed
-                custom_prompt=analysis_prompt  # Prompt used for focus, not content
-            )
-            bert_time = time.time() - start_time
+            # Base model processing - analyze input text only
+            if base_model == "BERT":
+                status_placeholder.info("🔍 **Step 1/4:** BERT analyzing semantic relationships from input text...")
+                progress_bar.progress(25)
+                start_time = time.time()
+                base_result = st.session_state.bert_processor.extract_relationships(
+                    text_input,  # Only input text analyzed
+                    custom_prompt=analysis_prompt  # Prompt used for focus, not content
+                )
+                base_time = time.time() - start_time
+            else:  # T5
+                status_placeholder.info("🔍 **Step 1/4:** T5 analyzing semantic relationships from input text...")
+                progress_bar.progress(25)
+                start_time = time.time()
+                base_result = st.session_state.t5_processor.extract_relationships(
+                    text_input,  # Only input text analyzed
+                    custom_prompt=analysis_prompt  # Prompt used for focus, not content
+                )
+                base_time = time.time() - start_time
             
             # Filter relationships
             status_placeholder.info("⚙️ **Step 2/4:** Filtering relationships by confidence threshold...")
