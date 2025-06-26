@@ -328,8 +328,8 @@ text_input = st.text_area(
     help="Text will be processed for relationship extraction"
 )
 
-# Set empty prompt since we removed the field
-analysis_prompt = ""
+# Set default semantic analysis prompt
+analysis_prompt = "extract semantic relationship with subject, predicate, object, and classify polarity and directness"
 
 # Input validation
 input_valid = text_input.strip() and len(text_input.strip()) > 20

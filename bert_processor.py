@@ -39,7 +39,7 @@ class BERTProcessor:
         self.current_prompt = ""
         # Reset processing time for clean measurements
     
-    def extract_relationships(self, text: str, custom_prompt: str = "") -> Dict[str, Any]:
+    def extract_relationships(self, text: str, custom_prompt: str = "extract semantic relationship with subject, predicate, object, and classify polarity and directness") -> Dict[str, Any]:
         """
         Extract semantic relationships from text using BERT.
         
