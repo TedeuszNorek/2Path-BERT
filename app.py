@@ -323,13 +323,19 @@ st.subheader("📝 Input")
 # Text to analyze
 text_input = st.text_area(
     "Text to analyze",
-    height=250,
+    height=200,
     placeholder="Paste your text here for semantic relationship extraction...",
     help="Text will be processed for relationship extraction"
 )
 
-# Set default semantic analysis prompt
-analysis_prompt = "extract semantic relationship with subject, predicate, object, and classify polarity and directness"
+# Analysis prompt section
+analysis_prompt = st.text_area(
+    "Analysis Prompt",
+    value="extract semantic relationship with subject, predicate, object, and classify polarity and directness",
+    height=80,
+    placeholder="Enter analysis instructions (leave empty for basic extraction)...",
+    help="Custom prompt to guide semantic relationship extraction - you can edit or delete this default prompt"
+)
 
 # Input validation
 input_valid = text_input.strip() and len(text_input.strip()) > 20

@@ -91,6 +91,7 @@ This is a scientific research platform that combines BERT-based text processing 
 
 ## Recent Changes
 
+- June 26, 2025: Added visible prompt section with default semantic analysis prompt (easily editable/deletable)
 - June 26, 2025: Added default semantic analysis prompt for structured relationship extraction
 - June 26, 2025: Fixed export system to use only authentic BERT analysis data (no fake/API data)
 - June 25, 2025: All export options thoroughly tested and validated working correctly
@@ -113,5 +114,6 @@ This is a scientific research platform that combines BERT-based text processing 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
-Interface preference: Single text analysis field only, no optional prompt field.
+Interface preference: Text analysis field with editable prompt section for customization.
 Quality preference: Replace confusing confidence scores with simple quality indicators (strong/medium/weak).
+Prompt preference: Default semantic analysis prompt should be visible and easily editable/deletable.
