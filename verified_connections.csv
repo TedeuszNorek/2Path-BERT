@@ -1,0 +1,11 @@
+From;To;Direction;Label;Type;Tags;Description;Experiment ID;Base Model;Model Configuration;Link;Analysis prompt;Text;Temperature;[Engineer];Timestamp
+DNA polymerase;new DNA strands;neutral;;;;;24;BERT;None;synthesize;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+DNA polymerase;new DNA strands;neutral;;;;;24;BERT;None;synthesize;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+new DNA strands;DNA polymerase;neutral;;;;;24;BERT;None;synthesize;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+The enzyme;ATP;neutral;;;;;24;BERT;None;require;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+The enzyme;ATP;neutral;;;;;24;BERT;None;require;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+The enzyme;energy;neutral;;;;;24;BERT;None;require;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+ATP;The enzyme;neutral;;;;;24;BERT;None;require;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+ATP;energy;neutral;;;;;24;BERT;None;for;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+energy;The enzyme;neutral;;;;;24;BERT;None;require;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09
+energy;ATP;neutral;;;;;24;BERT;None;for;;DNA polymerase synthesizes new DNA strands. The enzyme requires ATP for energy.;0.5;;2025-06-26 12:47:09

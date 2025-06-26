@@ -42,7 +42,6 @@ def create_research_export(
             
             relationships_df = db.get_relationships_by_analysis_id(exp_id)
             if relationships_df.empty:
-                print(f"Warning: No relationships found for analysis {exp_id}")
                 continue
             
             # Extract experiment metadata

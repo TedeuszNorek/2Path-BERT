@@ -91,6 +91,7 @@ This is a scientific research platform that combines BERT-based text processing 
 
 ## Recent Changes
 
+- June 26, 2025: Fixed export system to use only authentic BERT analysis data (no fake/API data)
 - June 25, 2025: All export options thoroughly tested and validated working correctly
 - June 25, 2025: Fixed critical "bert_result" undefined errors across all GNN models
 - June 25, 2025: Replaced confusing confidence scores with clear quality indicators (Strong/Medium/Weak)
